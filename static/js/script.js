@@ -61,10 +61,12 @@ document.getElementById('scrapeForm').addEventListener('submit', async (e) => {
     }
 });
 
-// View Report Button
-document.getElementById('viewReportBtn').addEventListener('click', () => {
-    document.getElementById('reportContent').textContent = currentReportContent;
-    document.getElementById('reportViewer').style.display = 'flex';
+// View Report Button (using event delegation since button is initially hidden)
+document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'viewReportBtn') {
+        document.getElementById('reportContent').textContent = currentReportContent;
+        document.getElementById('reportViewer').style.display = 'flex';
+    }
 });
 
 // Close Modal
