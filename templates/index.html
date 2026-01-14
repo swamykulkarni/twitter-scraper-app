@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twitter Scraper & Report Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🐦 Twitter Scraper</h1>
+            <p>Analyze tweets and generate detailed reports</p>
+        </header>
+
+        <div class="card">
+            <form id="scrapeForm">
+                <div class="form-group">
+                    <label for="username">Twitter Handle</label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        name="username" 
+                        placeholder="e.g., elonmusk (without @)"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="keywords">Keywords (optional)</label>
+                    <input 
+                        type="text" 
+                        id="keywords" 
+                        name="keywords" 
+                        placeholder="e.g., AI, technology, innovation (comma-separated)"
+                    >
+                    <small>Leave empty to get all recent tweets</small>
+                </div>
+
+                <button type="submit" id="submitBtn" class="btn-primary">
+                    <span id="btnText">Generate Report</span>
+                    <span id="btnLoader" class="loader" style="display: none;"></span>
+                </button>
+            </form>
+        </div>
+
+        <div id="results" class="results" style="display: none;">
+            <div class="card success">
+                <h2>✓ Report Generated!</h2>
+                <p id="resultMessage"></p>
+                <div class="download-buttons">
+                    <a id="downloadTxt" class="btn-download" download>
+                        📄 Download Report (.txt)
+                    </a>
+                    <a id="downloadJson" class="btn-download" download>
+                        📊 Download Raw Data (.json)
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div id="error" class="results" style="display: none;">
+            <div class="card error">
+                <h2>⚠️ Error</h2>
+                <p id="errorMessage"></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
