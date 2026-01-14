@@ -10,18 +10,33 @@ class ScheduledScraper:
     def __init__(self):
         self.scraper = TwitterScraper()
         self.schedules = []
+        self.schedules_file = os.environ.get('SCHEDULES_FILE', 'schedules.json')
         self.load_schedules()
     
     def load_schedules(self):
         """Load scheduled scrapes from config file"""
-        if os.path.exists('schedules.json'):
-            with open('schedules.json', 'r') as f:
-                self.schedules = json.load(f)
+        try:
+            if os.path.exists(self.schedules_file):
+                with open(self.schedules_file, 'r') as f:
+                    self.schedules = json.load(f)
+                print(f"Loaded {len(self.schedules)} schedules from {self.schedules_file}")
+            else:
+                print(f"No schedules file found at {self.schedules_file}")
+        except Exception as e:
+            print(f"Error loading schedules: {e}")
+            self.schedules = []
     
     def save_schedules(self):
         """Save scheduled scrapes to config file"""
-        with open('schedules.json', 'w') as f:
-            json.dump(self.schedules, f, indent=2)
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.schedules_file) if os.path.dirname(self.schedules_file) else '.', exist_ok=True)
+            
+            with open(self.schedules_file, 'w') as f:
+                json.dump(self.schedules, f, indent=2)
+            print(f"Saved {len(self.schedules)} schedules to {self.schedules_file}")
+        except Exception as e:
+            print(f"Error saving schedules: {e}")
     
     def add_schedule(self, username, keywords=None, frequency='daily', time_str='09:00', day=None):
         """Add a new scheduled scrape"""

@@ -36,6 +36,9 @@ document.getElementById('scrapeForm').addEventListener('submit', async (e) => {
             // Store report content
             currentReportContent = data.report_content;
             
+            console.log('Report generated successfully');
+            console.log('Report content length:', currentReportContent.length);
+            
             // Show success
             document.getElementById('resultMessage').textContent = 
                 `Found ${data.tweet_count} tweets from @${username}`;
@@ -44,6 +47,10 @@ document.getElementById('scrapeForm').addEventListener('submit', async (e) => {
             document.getElementById('downloadJson').href = `/download/${data.json_file}`;
             
             resultsDiv.style.display = 'block';
+            
+            // Verify button exists
+            const viewBtn = document.getElementById('viewReportBtn');
+            console.log('View Report button found:', viewBtn !== null);
         } else {
             // Show error
             document.getElementById('errorMessage').textContent = data.error;
@@ -63,7 +70,9 @@ document.getElementById('scrapeForm').addEventListener('submit', async (e) => {
 
 // View Report Button (using event delegation since button is initially hidden)
 document.addEventListener('click', (e) => {
+    console.log('Click detected on:', e.target.id, e.target.className);
     if (e.target && e.target.id === 'viewReportBtn') {
+        console.log('View Report clicked! Content length:', currentReportContent.length);
         document.getElementById('reportContent').textContent = currentReportContent;
         document.getElementById('reportViewer').style.display = 'flex';
     }
