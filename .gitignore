@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 reports/*.txt
 reports/*.json
+historical_data/
+schedules.json
 venv/
 .venv/
 .DS_Store

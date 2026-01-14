@@ -13,56 +13,138 @@
             <p>Analyze tweets and generate detailed reports</p>
         </header>
 
-        <div class="card">
-            <form id="scrapeForm">
-                <div class="form-group">
-                    <label for="username">Twitter Handle</label>
-                    <input 
-                        type="text" 
-                        id="username" 
-                        name="username" 
-                        placeholder="e.g., elonmusk (without @)"
-                        required
-                    >
-                </div>
-
-                <div class="form-group">
-                    <label for="keywords">Keywords (optional)</label>
-                    <input 
-                        type="text" 
-                        id="keywords" 
-                        name="keywords" 
-                        placeholder="e.g., AI, technology, innovation (comma-separated)"
-                    >
-                    <small>Leave empty to get all recent tweets</small>
-                </div>
-
-                <button type="submit" id="submitBtn" class="btn-primary">
-                    <span id="btnText">Generate Report</span>
-                    <span id="btnLoader" class="loader" style="display: none;"></span>
-                </button>
-            </form>
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="scrape">Quick Scrape</button>
+            <button class="tab-btn" data-tab="schedule">Scheduled Scraping</button>
         </div>
 
-        <div id="results" class="results" style="display: none;">
-            <div class="card success">
-                <h2>✓ Report Generated!</h2>
-                <p id="resultMessage"></p>
-                <div class="download-buttons">
-                    <a id="downloadTxt" class="btn-download" download>
-                        📄 Download Report (.txt)
-                    </a>
-                    <a id="downloadJson" class="btn-download" download>
-                        📊 Download Raw Data (.json)
-                    </a>
+        <!-- Quick Scrape Tab -->
+        <div id="scrape-tab" class="tab-content active">
+            <div class="card">
+                <form id="scrapeForm">
+                    <div class="form-group">
+                        <label for="username">Twitter Handle</label>
+                        <input 
+                            type="text" 
+                            id="username" 
+                            name="username" 
+                            placeholder="e.g., elonmusk (without @)"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="keywords">Keywords (optional)</label>
+                        <input 
+                            type="text" 
+                            id="keywords" 
+                            name="keywords" 
+                            placeholder="e.g., AI, technology, innovation (comma-separated)"
+                        >
+                        <small>Leave empty to get all recent tweets</small>
+                    </div>
+
+                    <button type="submit" id="submitBtn" class="btn-primary">
+                        <span id="btnText">Generate Report</span>
+                        <span id="btnLoader" class="loader" style="display: none;"></span>
+                    </button>
+                </form>
+            </div>
+
+            <div id="results" class="results" style="display: none;">
+                <div class="card success">
+                    <h2>✓ Report Generated!</h2>
+                    <p id="resultMessage"></p>
+                    <div class="action-buttons">
+                        <button id="viewReportBtn" class="btn-action">
+                            👁️ View Report
+                        </button>
+                        <a id="downloadTxt" class="btn-download" download>
+                            📄 Download Report (.txt)
+                        </a>
+                        <a id="downloadJson" class="btn-download" download>
+                            📊 Download Raw Data (.json)
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error" class="results" style="display: none;">
+                <div class="card error">
+                    <h2>⚠️ Error</h2>
+                    <p id="errorMessage"></p>
                 </div>
             </div>
         </div>
 
-        <div id="error" class="results" style="display: none;">
-            <div class="card error">
-                <h2>⚠️ Error</h2>
-                <p id="errorMessage"></p>
+        <!-- Schedule Tab -->
+        <div id="schedule-tab" class="tab-content">
+            <div class="card">
+                <h2>📅 Schedule Automatic Scraping</h2>
+                <p>Build historical data by scheduling regular scrapes (works around 7-day API limit)</p>
+                
+                <form id="scheduleForm">
+                    <div class="form-group">
+                        <label for="schedule-username">Twitter Handle</label>
+                        <input 
+                            type="text" 
+                            id="schedule-username" 
+                            placeholder="e.g., elonmusk"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="schedule-keywords">Keywords (optional)</label>
+                        <input 
+                            type="text" 
+                            id="schedule-keywords" 
+                            placeholder="e.g., AI, technology"
+                        >
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="schedule-frequency">Frequency</label>
+                            <select id="schedule-frequency">
+                                <option value="daily">Daily</option>
+                                <option value="hourly">Hourly</option>
+                                <option value="weekly">Weekly</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="schedule-time">Time</label>
+                            <input 
+                                type="time" 
+                                id="schedule-time" 
+                                value="09:00"
+                            >
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary">
+                        ➕ Add Schedule
+                    </button>
+                </form>
+
+                <div id="schedules-list" class="schedules-list">
+                    <h3>Active Schedules</h3>
+                    <div id="schedules-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Viewer Modal -->
+        <div id="reportViewer" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>📊 Report Viewer</h2>
+                    <button id="closeModal" class="close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <pre id="reportContent"></pre>
+                </div>
             </div>
         </div>
     </div>
