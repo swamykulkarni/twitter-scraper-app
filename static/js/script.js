@@ -100,6 +100,23 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     });
 });
 
+// Show/hide day selector based on frequency
+document.getElementById('schedule-frequency').addEventListener('change', (e) => {
+    const daySelector = document.getElementById('day-selector');
+    const timeSelector = document.getElementById('time-selector');
+    
+    if (e.target.value === 'weekly') {
+        daySelector.style.display = 'block';
+        timeSelector.style.display = 'block';
+    } else if (e.target.value === 'hourly') {
+        daySelector.style.display = 'none';
+        timeSelector.style.display = 'none';
+    } else {
+        daySelector.style.display = 'none';
+        timeSelector.style.display = 'block';
+    }
+});
+
 // Schedule Form
 document.getElementById('scheduleForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -108,12 +125,13 @@ document.getElementById('scheduleForm').addEventListener('submit', async (e) => 
     const keywords = document.getElementById('schedule-keywords').value.trim();
     const frequency = document.getElementById('schedule-frequency').value;
     const time = document.getElementById('schedule-time').value;
+    const day = document.getElementById('schedule-day').value;
     
     try {
         const response = await fetch('/schedules', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, keywords, frequency, time })
+            body: JSON.stringify({ username, keywords, frequency, time, day })
         });
         
         const data = await response.json();
@@ -143,19 +161,37 @@ async function loadSchedules() {
             return;
         }
         
-        container.innerHTML = data.schedules.map(schedule => `
-            <div class="schedule-item">
-                <div class="schedule-info">
-                    <strong>@${schedule.username}</strong>
-                    ${schedule.keywords ? `<span style="color: #666;"> • Keywords: ${schedule.keywords.join(', ')}</span>` : ''}
-                    <div class="schedule-meta">
-                        ${schedule.frequency} at ${schedule.time}
-                        ${schedule.last_run ? ` • Last run: ${new Date(schedule.last_run).toLocaleString()}` : ''}
+        container.innerHTML = data.schedules.map(schedule => {
+            let scheduleText = schedule.frequency;
+            if (schedule.frequency === 'weekly' && schedule.day) {
+                scheduleText = `Weekly on ${schedule.day.charAt(0).toUpperCase() + schedule.day.slice(1)}`;
+            }
+            if (schedule.time && schedule.frequency !== 'hourly') {
+                scheduleText += ` at ${schedule.time}`;
+            }
+            
+            return `
+                <div class="schedule-item">
+                    <div class="schedule-info">
+                        <strong>@${schedule.username}</strong>
+                        ${schedule.keywords ? `<span style="color: #666;"> • Keywords: ${schedule.keywords.join(', ')}</span>` : ''}
+                        <div class="schedule-meta">
+                            ${scheduleText}
+                            ${schedule.last_run ? ` • Last run: ${new Date(schedule.last_run).toLocaleString()}` : ''}
+                        </div>
                     </div>
+                    <button class="btn-delete" data-schedule-id="${schedule.id}">Delete</button>
                 </div>
-                <button class="btn-delete" onclick="deleteSchedule(${schedule.id})">Delete</button>
-            </div>
-        `).join('');
+            `;
+        }).join('');
+        
+        // Add event listeners to delete buttons
+        document.querySelectorAll('.btn-delete').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const scheduleId = parseInt(this.getAttribute('data-schedule-id'));
+                deleteSchedule(scheduleId);
+            });
+        });
     } catch (error) {
         console.error('Error loading schedules:', error);
     }

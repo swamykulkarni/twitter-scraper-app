@@ -23,7 +23,7 @@ class ScheduledScraper:
         with open('schedules.json', 'w') as f:
             json.dump(self.schedules, f, indent=2)
     
-    def add_schedule(self, username, keywords=None, frequency='daily', time_str='09:00'):
+    def add_schedule(self, username, keywords=None, frequency='daily', time_str='09:00', day=None):
         """Add a new scheduled scrape"""
         schedule_config = {
             'id': len(self.schedules) + 1,
@@ -31,6 +31,7 @@ class ScheduledScraper:
             'keywords': keywords,
             'frequency': frequency,
             'time': time_str,
+            'day': day,
             'enabled': True,
             'last_run': None
         }
@@ -107,14 +108,30 @@ class ScheduledScraper:
             return
         
         frequency = schedule_config['frequency']
-        time_str = schedule_config['time']
+        time_str = schedule_config.get('time', '09:00')
+        day = schedule_config.get('day')
         
-        if frequency == 'daily':
-            schedule.every().day.at(time_str).do(self.run_scrape, schedule_config)
-        elif frequency == 'hourly':
+        if frequency == 'hourly':
             schedule.every().hour.do(self.run_scrape, schedule_config)
+        elif frequency == 'daily':
+            schedule.every().day.at(time_str).do(self.run_scrape, schedule_config)
         elif frequency == 'weekly':
-            schedule.every().week.at(time_str).do(self.run_scrape, schedule_config)
+            if day == 'monday':
+                schedule.every().monday.at(time_str).do(self.run_scrape, schedule_config)
+            elif day == 'tuesday':
+                schedule.every().tuesday.at(time_str).do(self.run_scrape, schedule_config)
+            elif day == 'wednesday':
+                schedule.every().wednesday.at(time_str).do(self.run_scrape, schedule_config)
+            elif day == 'thursday':
+                schedule.every().thursday.at(time_str).do(self.run_scrape, schedule_config)
+            elif day == 'friday':
+                schedule.every().friday.at(time_str).do(self.run_scrape, schedule_config)
+            elif day == 'saturday':
+                schedule.every().saturday.at(time_str).do(self.run_scrape, schedule_config)
+            elif day == 'sunday':
+                schedule.every().sunday.at(time_str).do(self.run_scrape, schedule_config)
+            else:
+                schedule.every().week.at(time_str).do(self.run_scrape, schedule_config)
     
     def setup_all_schedules(self):
         """Setup all schedules"""

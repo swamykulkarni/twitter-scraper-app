@@ -83,13 +83,14 @@ def add_schedule():
         keywords_input = data.get('keywords', '').strip()
         frequency = data.get('frequency', 'daily')
         time_str = data.get('time', '09:00')
+        day = data.get('day')
         
         if not username:
             return jsonify({'error': 'Username is required'}), 400
         
         keywords = [k.strip() for k in keywords_input.split(',')] if keywords_input else None
         
-        schedule_config = scheduler.add_schedule(username, keywords, frequency, time_str)
+        schedule_config = scheduler.add_schedule(username, keywords, frequency, time_str, day)
         return jsonify({'success': True, 'schedule': schedule_config})
     
     except Exception as e:
