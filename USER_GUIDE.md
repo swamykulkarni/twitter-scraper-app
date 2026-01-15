@@ -1,4 +1,4 @@
-# Twitter Scraper & Report Generator - User Guide
+# Social Listening Platform - User Guide
 
 ## 📋 Table of Contents
 1. [Getting Started](#getting-started)
@@ -12,8 +12,8 @@
 
 ## 🚀 Getting Started
 
-### What This Tool Does
-The Twitter Scraper analyzes tweets from any public Twitter/X account and generates detailed reports with engagement statistics, keyword analysis, and historical data tracking.
+### What This Platform Does
+The Social Listening Platform monitors and analyzes social media conversations from Twitter/X accounts to generate actionable intelligence for lead generation, market research, and competitive analysis.
 
 ### Access the App
 - **Live URL**: Your Railway deployment URL
