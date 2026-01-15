@@ -514,3 +514,45 @@ input[type="number"]:focus {
 .btn-view:hover {
     background: #45a049;
 }
+
+
+.schedules-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.schedules-header h3 {
+    margin: 0;
+}
+
+.status-label {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.status-active {
+    background: #4caf50;
+    color: white;
+}
+
+.status-inactive {
+    background: #9e9e9e;
+    color: white;
+}
+
+.status-error {
+    background: #f44336;
+    color: white;
+}
+
+.schedule-meta {
+    font-size: 0.9rem;
+    color: #666;
+    margin-top: 5px;
+    line-height: 1.6;
+}

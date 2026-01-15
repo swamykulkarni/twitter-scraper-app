@@ -125,11 +125,21 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
         document.getElementById(`${tabName}-tab`).classList.add('active');
         
-        // Load schedules if switching to schedule tab
+        // Load data when switching tabs
         if (tabName === 'schedule') {
             loadSchedules();
+        } else if (tabName === 'history') {
+            loadReports();
         }
     });
+});
+
+// Load schedules on page load
+document.addEventListener('DOMContentLoaded', () => {
+    // Load schedules if on schedule tab
+    if (document.getElementById('schedule-tab').classList.contains('active')) {
+        loadSchedules();
+    }
 });
 
 // Show/hide day selector based on frequency
@@ -187,10 +197,21 @@ async function loadSchedules() {
         const data = await response.json();
         
         const container = document.getElementById('schedules-container');
+        const statusLabel = document.getElementById('schedule-status');
         
         if (data.schedules.length === 0) {
             container.innerHTML = '<p style="color: #666;">No schedules yet. Add one above!</p>';
+            if (statusLabel) {
+                statusLabel.textContent = 'No active schedules';
+                statusLabel.className = 'status-label status-inactive';
+            }
             return;
+        }
+        
+        // Update status label
+        if (statusLabel) {
+            statusLabel.textContent = `${data.schedules.length} Active Schedule${data.schedules.length > 1 ? 's' : ''}`;
+            statusLabel.className = 'status-label status-active';
         }
         
         container.innerHTML = data.schedules.map(schedule => {
@@ -202,14 +223,24 @@ async function loadSchedules() {
                 scheduleText += ` at ${schedule.time}`;
             }
             
+            // Calculate next run time
+            let nextRunText = '';
+            if (schedule.last_run) {
+                const lastRun = new Date(schedule.last_run);
+                nextRunText = `Last run: ${lastRun.toLocaleString()}`;
+            } else {
+                nextRunText = 'Never run yet';
+            }
+            
             return `
                 <div class="schedule-item">
                     <div class="schedule-info">
                         <strong>@${schedule.username}</strong>
                         ${schedule.keywords ? `<span style="color: #666;"> • Keywords: ${schedule.keywords.join(', ')}</span>` : ''}
                         <div class="schedule-meta">
-                            ${scheduleText}
-                            ${schedule.last_run ? ` • Last run: ${new Date(schedule.last_run).toLocaleString()}` : ''}
+                            📅 ${scheduleText}
+                            <br>
+                            ⏱️ ${nextRunText}
                         </div>
                     </div>
                     <button class="btn-delete" data-schedule-id="${schedule.id}">Delete</button>
@@ -226,6 +257,14 @@ async function loadSchedules() {
         });
     } catch (error) {
         console.error('Error loading schedules:', error);
+        const container = document.getElementById('schedules-container');
+        container.innerHTML = '<p style="color: #f44336;">Error loading schedules. Make sure PostgreSQL is set up.</p>';
+        
+        const statusLabel = document.getElementById('schedule-status');
+        if (statusLabel) {
+            statusLabel.textContent = 'Error loading schedules';
+            statusLabel.className = 'status-label status-error';
+        }
     }
 }
 
