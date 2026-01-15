@@ -248,3 +248,76 @@ async function deleteSchedule(scheduleId) {
         alert('Network error: ' + error.message);
     }
 }
+
+
+// Load reports history
+async function loadReports() {
+    try {
+        const response = await fetch('/reports');
+        const data = await response.json();
+        
+        const container = document.getElementById('reports-container');
+        
+        if (!data.reports || data.reports.length === 0) {
+            container.innerHTML = '<p style="color: #666;">No reports yet. Generate one in the Quick Scrape tab!</p>';
+            return;
+        }
+        
+        container.innerHTML = data.reports.map(report => `
+            <div class="report-item">
+                <div class="report-info">
+                    <strong>@${report.username}</strong>
+                    ${report.keywords ? `<span style="color: #666;"> • Keywords: ${report.keywords.join(', ')}</span>` : ''}
+                    <div class="report-meta">
+                        ${report.tweet_count} tweets • ${report.account_type || 'N/A'} • Lead Score: ${report.lead_score || 'N/A'}/7
+                        <br>Generated: ${new Date(report.created_at).toLocaleString()}
+                    </div>
+                </div>
+                <div class="report-actions">
+                    <button class="btn-view" data-report-id="${report.id}">View</button>
+                </div>
+            </div>
+        `).join('');
+        
+        // Add event listeners to view buttons
+        document.querySelectorAll('.btn-view').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const reportId = parseInt(this.getAttribute('data-report-id'));
+                await viewStoredReport(reportId);
+            });
+        });
+    } catch (error) {
+        console.error('Error loading reports:', error);
+        document.getElementById('reports-container').innerHTML = 
+            '<p style="color: #f44336;">Error loading reports</p>';
+    }
+}
+
+// View stored report
+async function viewStoredReport(reportId) {
+    try {
+        const response = await fetch(`/reports/${reportId}`);
+        const data = await response.json();
+        
+        if (response.ok) {
+            document.getElementById('reportContent').textContent = data.report_content;
+            document.getElementById('reportViewer').style.display = 'flex';
+        } else {
+            alert('Error loading report: ' + data.error);
+        }
+    } catch (error) {
+        alert('Network error: ' + error.message);
+    }
+}
+
+// Update tab switching to load reports
+const originalTabSwitching = document.querySelectorAll('.tab-btn');
+originalTabSwitching.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const tabName = btn.dataset.tab;
+        
+        if (tabName === 'history') {
+            loadReports();
+        }
+    });
+});

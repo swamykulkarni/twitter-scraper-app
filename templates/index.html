@@ -16,6 +16,7 @@
         <div class="tabs">
             <button class="tab-btn active" data-tab="scrape">Quick Scrape</button>
             <button class="tab-btn" data-tab="schedule">Scheduled Scraping</button>
+            <button class="tab-btn" data-tab="history">Report History</button>
         </div>
 
         <!-- Quick Scrape Tab -->
@@ -197,6 +198,18 @@
                 <div id="schedules-list" class="schedules-list">
                     <h3>Active Schedules</h3>
                     <div id="schedules-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Tab -->
+        <div id="history-tab" class="tab-content">
+            <div class="card">
+                <h2>📚 Report History</h2>
+                <p>View and access all previously generated reports</p>
+                
+                <div id="reports-list" class="reports-list">
+                    <div id="reports-container">Loading...</div>
                 </div>
             </div>
         </div>

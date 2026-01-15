@@ -10,61 +10,40 @@ class ScheduledScraper:
     def __init__(self):
         self.scraper = TwitterScraper()
         self.schedules = []
-        self.schedules_file = os.environ.get('SCHEDULES_FILE', 'schedules.json')
         self.load_schedules()
     
     def load_schedules(self):
-        """Load scheduled scrapes from config file"""
+        """Load scheduled scrapes from database"""
         try:
-            if os.path.exists(self.schedules_file):
-                with open(self.schedules_file, 'r') as f:
-                    self.schedules = json.load(f)
-                print(f"Loaded {len(self.schedules)} schedules from {self.schedules_file}")
-            else:
-                print(f"No schedules file found at {self.schedules_file}")
+            from database import get_db_session, Schedule as DBSchedule
+            db = get_db_session()
+            try:
+                db_schedules = db.query(DBSchedule).filter(DBSchedule.enabled == True).all()
+                self.schedules = [s.to_dict() for s in db_schedules]
+                print(f"Loaded {len(self.schedules)} schedules from database")
+            finally:
+                db.close()
         except Exception as e:
-            print(f"Error loading schedules: {e}")
+            print(f"Error loading schedules from database: {e}")
             self.schedules = []
     
-    def save_schedules(self):
-        """Save scheduled scrapes to config file"""
-        try:
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(self.schedules_file) if os.path.dirname(self.schedules_file) else '.', exist_ok=True)
-            
-            with open(self.schedules_file, 'w') as f:
-                json.dump(self.schedules, f, indent=2)
-            print(f"Saved {len(self.schedules)} schedules to {self.schedules_file}")
-        except Exception as e:
-            print(f"Error saving schedules: {e}")
-    
-    def add_schedule(self, username, keywords=None, frequency='daily', time_str='09:00', day=None):
-        """Add a new scheduled scrape"""
-        schedule_config = {
-            'id': len(self.schedules) + 1,
-            'username': username,
-            'keywords': keywords,
-            'frequency': frequency,
-            'time': time_str,
-            'day': day,
-            'enabled': True,
-            'last_run': None
-        }
-        self.schedules.append(schedule_config)
-        self.save_schedules()
-        self.setup_schedule(schedule_config)
-        return schedule_config
+    def add_schedule_from_dict(self, schedule_dict):
+        """Add a schedule from dictionary (already saved to DB)"""
+        self.schedules.append(schedule_dict)
+        self.setup_schedule(schedule_dict)
+        return schedule_dict
     
     def remove_schedule(self, schedule_id):
         """Remove a scheduled scrape"""
         self.schedules = [s for s in self.schedules if s['id'] != schedule_id]
-        self.save_schedules()
         schedule.clear()
         self.setup_all_schedules()
     
     def run_scrape(self, schedule_config):
         """Execute a scheduled scrape"""
         try:
+            from database import get_db_session, Schedule as DBSchedule, HistoricalTweet
+            
             username = schedule_config['username']
             keywords = schedule_config.get('keywords')
             
@@ -72,17 +51,26 @@ class ScheduledScraper:
             tweets_data = self.scraper.search_user_tweets(username, keywords=keywords, max_results=100)
             
             if tweets_data and 'data' in tweets_data:
-                # Generate report with timestamp
+                # Generate report
                 report_file = self.scraper.generate_report(tweets_data, username, keywords)
                 
-                # Save to historical data
+                # Save to historical data in database
                 self.save_historical_data(username, tweets_data)
                 
-                # Update last run time
-                for s in self.schedules:
-                    if s['id'] == schedule_config['id']:
-                        s['last_run'] = datetime.now().isoformat()
-                self.save_schedules()
+                # Update last run time in database
+                db = get_db_session()
+                try:
+                    schedule_db = db.query(DBSchedule).filter(DBSchedule.id == schedule_config['id']).first()
+                    if schedule_db:
+                        schedule_db.last_run = datetime.utcnow()
+                        db.commit()
+                        
+                        # Update in-memory schedule
+                        for s in self.schedules:
+                            if s['id'] == schedule_config['id']:
+                                s['last_run'] = datetime.utcnow().isoformat()
+                finally:
+                    db.close()
                 
                 print(f"✓ Scheduled scrape completed: {report_file}")
             else:
@@ -92,30 +80,36 @@ class ScheduledScraper:
             print(f"Error in scheduled scrape: {e}")
     
     def save_historical_data(self, username, tweets_data):
-        """Append tweets to historical data file"""
-        os.makedirs('historical_data', exist_ok=True)
-        history_file = f'historical_data/{username}_history.json'
-        
-        # Load existing history
-        history = []
-        if os.path.exists(history_file):
-            with open(history_file, 'r') as f:
-                history = json.load(f)
-        
-        # Add new tweets (avoid duplicates)
-        existing_ids = {tweet['id'] for tweet in history}
-        new_tweets = [tweet for tweet in tweets_data['data'] if tweet['id'] not in existing_ids]
-        
-        history.extend(new_tweets)
-        
-        # Sort by date (newest first)
-        history.sort(key=lambda x: x.get('created_at', ''), reverse=True)
-        
-        # Save updated history
-        with open(history_file, 'w') as f:
-            json.dump(history, f, indent=2)
-        
-        print(f"Added {len(new_tweets)} new tweets to history. Total: {len(history)}")
+        """Save tweets to database"""
+        try:
+            from database import get_db_session, HistoricalTweet
+            
+            db = get_db_session()
+            try:
+                new_count = 0
+                for tweet in tweets_data['data']:
+                    # Check if tweet already exists
+                    existing = db.query(HistoricalTweet).filter(
+                        HistoricalTweet.tweet_id == tweet['id']
+                    ).first()
+                    
+                    if not existing:
+                        historical_tweet = HistoricalTweet(
+                            tweet_id=tweet['id'],
+                            username=username,
+                            text=tweet['text'],
+                            created_at=datetime.fromisoformat(tweet['created_at'].replace('Z', '+00:00')),
+                            tweet_data=tweet
+                        )
+                        db.add(historical_tweet)
+                        new_count += 1
+                
+                db.commit()
+                print(f"Added {new_count} new tweets to historical database")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"Error saving historical data: {e}")
     
     def setup_schedule(self, schedule_config):
         """Setup a single schedule"""

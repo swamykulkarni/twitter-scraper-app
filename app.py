@@ -4,8 +4,13 @@ import json
 from datetime import datetime
 from twitter_scraper import TwitterScraper
 from scheduler import ScheduledScraper
+from database import init_db, get_db_session, Report, Schedule as DBSchedule, HistoricalTweet
 
 app = Flask(__name__)
+
+# Initialize database
+init_db()
+
 scheduler = ScheduledScraper()
 
 # Start scheduler on app startup
@@ -48,8 +53,28 @@ def scrape():
         user_profile = tweets_data.get('user_profile', {})
         account_analysis = scraper.analyze_account_type(user_profile) if user_profile else {}
         
+        # Save to database
+        db = get_db_session()
+        try:
+            db_report = Report(
+                username=username,
+                keywords=keywords,
+                tweet_count=len(tweets_data['data']),
+                account_type=account_analysis.get('type'),
+                lead_score=account_analysis.get('score'),
+                report_content=report_content,
+                tweets_data=tweets_data,
+                filters=filters
+            )
+            db.add(db_report)
+            db.commit()
+            report_id = db_report.id
+        finally:
+            db.close()
+        
         return jsonify({
             'success': True,
+            'report_id': report_id,
             'report_file': report_file,
             'json_file': json_file,
             'tweet_count': len(tweets_data['data']),
@@ -59,6 +84,43 @@ def scrape():
             'lead_score': account_analysis.get('score')
         })
     
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/reports', methods=['GET'])
+def get_reports():
+    """Get list of all reports"""
+    try:
+        db = get_db_session()
+        try:
+            reports = db.query(Report).order_by(Report.created_at.desc()).limit(50).all()
+            return jsonify({
+                'success': True,
+                'reports': [r.to_dict() for r in reports]
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/reports/<int:report_id>', methods=['GET'])
+def get_report(report_id):
+    """Get specific report by ID"""
+    try:
+        db = get_db_session()
+        try:
+            report = db.query(Report).filter(Report.id == report_id).first()
+            if not report:
+                return jsonify({'error': 'Report not found'}), 404
+            
+            return jsonify({
+                'success': True,
+                'report': report.to_dict(),
+                'report_content': report.report_content,
+                'tweets_data': report.tweets_data
+            })
+        finally:
+            db.close()
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -80,7 +142,16 @@ def view_report(filename):
 
 @app.route('/schedules', methods=['GET'])
 def get_schedules():
-    return jsonify({'schedules': scheduler.schedules})
+    """Get all schedules from database"""
+    try:
+        db = get_db_session()
+        try:
+            schedules = db.query(DBSchedule).filter(DBSchedule.enabled == True).all()
+            return jsonify({'schedules': [s.to_dict() for s in schedules]})
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/schedules', methods=['POST'])
 def add_schedule():
@@ -97,8 +168,27 @@ def add_schedule():
         
         keywords = [k.strip() for k in keywords_input.split(',')] if keywords_input else None
         
-        schedule_config = scheduler.add_schedule(username, keywords, frequency, time_str, day)
-        return jsonify({'success': True, 'schedule': schedule_config})
+        # Save to database
+        db = get_db_session()
+        try:
+            db_schedule = DBSchedule(
+                username=username,
+                keywords=keywords,
+                frequency=frequency,
+                time=time_str,
+                day=day,
+                enabled=True
+            )
+            db.add(db_schedule)
+            db.commit()
+            schedule_dict = db_schedule.to_dict()
+        finally:
+            db.close()
+        
+        # Add to scheduler
+        scheduler.add_schedule_from_dict(schedule_dict)
+        
+        return jsonify({'success': True, 'schedule': schedule_dict})
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -106,6 +196,15 @@ def add_schedule():
 @app.route('/schedules/<int:schedule_id>', methods=['DELETE'])
 def delete_schedule(schedule_id):
     try:
+        db = get_db_session()
+        try:
+            schedule = db.query(DBSchedule).filter(DBSchedule.id == schedule_id).first()
+            if schedule:
+                db.delete(schedule)
+                db.commit()
+        finally:
+            db.close()
+        
         scheduler.remove_schedule(schedule_id)
         return jsonify({'success': True})
     except Exception as e:
@@ -114,13 +213,22 @@ def delete_schedule(schedule_id):
 @app.route('/historical/<username>')
 def get_historical(username):
     try:
-        history_file = f'historical_data/{username}_history.json'
-        if os.path.exists(history_file):
-            with open(history_file, 'r') as f:
-                history = json.load(f)
-            return jsonify({'success': True, 'tweets': history, 'count': len(history)})
-        else:
-            return jsonify({'error': 'No historical data found'}), 404
+        db = get_db_session()
+        try:
+            tweets = db.query(HistoricalTweet).filter(
+                HistoricalTweet.username == username
+            ).order_by(HistoricalTweet.created_at.desc()).all()
+            
+            if not tweets:
+                return jsonify({'error': 'No historical data found'}), 404
+            
+            return jsonify({
+                'success': True,
+                'tweets': [t.to_dict() for t in tweets],
+                'count': len(tweets)
+            })
+        finally:
+            db.close()
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
