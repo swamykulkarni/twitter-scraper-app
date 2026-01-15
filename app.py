@@ -27,6 +27,7 @@ def scrape():
         username = data.get('username', '').strip()
         keywords_input = data.get('keywords', '').strip()
         filters = data.get('filters', {})
+        min_keyword_mentions = data.get('min_keyword_mentions', 1)
         
         if not username:
             return jsonify({'error': 'Username is required'}), 400
@@ -39,7 +40,7 @@ def scrape():
         if not tweets_data or 'data' not in tweets_data:
             return jsonify({'error': 'No tweets found or API error occurred'}), 404
         
-        report_file = scraper.generate_report(tweets_data, username, keywords)
+        report_file = scraper.generate_report(tweets_data, username, keywords, min_keyword_mentions)
         
         json_file = report_file.replace('.txt', '.json')
         with open(json_file, 'w', encoding='utf-8') as f:

@@ -240,7 +240,7 @@ class TwitterScraper:
         
         return filtered
     
-    def generate_report(self, tweets_data, username, keywords=None):
+    def generate_report(self, tweets_data, username, keywords=None, min_keyword_mentions=1):
         """Generate a formatted report from tweet data with advanced analytics"""
         if not tweets_data or 'data' not in tweets_data:
             return "No tweets found."
@@ -323,13 +323,43 @@ class TwitterScraper:
             f.write(f"  Negative: {negative_count} ({negative_count/len(tweets)*100:.1f}%)\n")
             f.write(f"  Opportunity Signals: {opportunity_count} tweets\n\n")
             
-            # Keyword analysis
+            # Keyword analysis with ranking and threshold
             if keywords:
                 f.write("KEYWORD ANALYSIS\n")
                 f.write("-" * 80 + "\n")
+                
+                # Count mentions for each keyword
+                keyword_counts = []
                 for keyword in keywords:
                     count = sum(1 for tweet in tweets if keyword.lower() in tweet['text'].lower())
-                    f.write(f"'{keyword}': {count} mentions\n")
+                    keyword_counts.append((keyword, count))
+                
+                # Sort by count (descending) - Ranking
+                keyword_counts.sort(key=lambda x: x[1], reverse=True)
+                
+                # Filter by minimum threshold
+                qualified_keywords = [(kw, count) for kw, count in keyword_counts if count >= min_keyword_mentions]
+                
+                if qualified_keywords:
+                    f.write(f"Minimum mentions threshold: {min_keyword_mentions}\n")
+                    f.write(f"Qualified keywords: {len(qualified_keywords)} of {len(keywords)}\n\n")
+                    
+                    for rank, (keyword, count) in enumerate(qualified_keywords, 1):
+                        percentage = (count / len(tweets)) * 100
+                        f.write(f"#{rank}. '{keyword}': {count} mentions ({percentage:.1f}% of tweets)\n")
+                    
+                    # Show disqualified keywords if any
+                    disqualified = [(kw, count) for kw, count in keyword_counts if count < min_keyword_mentions]
+                    if disqualified:
+                        f.write(f"\nBelow threshold ({min_keyword_mentions} mentions):\n")
+                        for keyword, count in disqualified:
+                            f.write(f"  '{keyword}': {count} mentions\n")
+                else:
+                    f.write(f"⚠️ No keywords met the minimum threshold of {min_keyword_mentions} mentions.\n")
+                    f.write(f"\nAll keyword counts:\n")
+                    for keyword, count in keyword_counts:
+                        f.write(f"  '{keyword}': {count} mentions\n")
+                
                 f.write("\n")
             
             # Top Performing Tweets (by engagement score)

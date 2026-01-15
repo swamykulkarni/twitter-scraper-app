@@ -5,6 +5,7 @@ document.getElementById('scrapeForm').addEventListener('submit', async (e) => {
     
     const username = document.getElementById('username').value.trim();
     const keywords = document.getElementById('keywords').value.trim();
+    const minKeywordMentions = document.getElementById('min-keyword-mentions').value;
     
     // Collect advanced filters
     const filters = {};
@@ -41,7 +42,12 @@ document.getElementById('scrapeForm').addEventListener('submit', async (e) => {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ username, keywords, filters })
+            body: JSON.stringify({ 
+                username, 
+                keywords, 
+                filters,
+                min_keyword_mentions: minKeywordMentions ? parseInt(minKeywordMentions) : 1
+            })
         });
         
         const data = await response.json();
