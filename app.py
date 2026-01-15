@@ -21,6 +21,7 @@ def scrape():
         data = request.json
         username = data.get('username', '').strip()
         keywords_input = data.get('keywords', '').strip()
+        filters = data.get('filters', {})
         
         if not username:
             return jsonify({'error': 'Username is required'}), 400
@@ -28,7 +29,7 @@ def scrape():
         keywords = [k.strip() for k in keywords_input.split(',')] if keywords_input else None
         
         scraper = TwitterScraper()
-        tweets_data = scraper.search_user_tweets(username, keywords=keywords, max_results=100)
+        tweets_data = scraper.search_user_tweets(username, keywords=keywords, max_results=100, filters=filters)
         
         if not tweets_data or 'data' not in tweets_data:
             return jsonify({'error': 'No tweets found or API error occurred'}), 404
@@ -43,13 +44,19 @@ def scrape():
         with open(report_file, 'r', encoding='utf-8') as f:
             report_content = f.read()
         
+        # Get account analysis
+        user_profile = tweets_data.get('user_profile', {})
+        account_analysis = scraper.analyze_account_type(user_profile) if user_profile else {}
+        
         return jsonify({
             'success': True,
             'report_file': report_file,
             'json_file': json_file,
             'tweet_count': len(tweets_data['data']),
             'report_content': report_content,
-            'tweets_data': tweets_data['data']
+            'tweets_data': tweets_data['data'],
+            'account_type': account_analysis.get('type'),
+            'lead_score': account_analysis.get('score')
         })
     
     except Exception as e:

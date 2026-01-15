@@ -3,6 +3,7 @@ import requests
 import json
 from datetime import datetime
 from dotenv import load_dotenv
+import re
 
 load_dotenv()
 
@@ -17,19 +18,22 @@ class TwitterScraper:
             "Authorization": f"Bearer {self.bearer_token}"
         }
     
-    def search_user_tweets(self, username, keywords=None, max_results=100):
+    def search_user_tweets(self, username, keywords=None, max_results=100, filters=None):
         """
-        Search tweets from a specific user, optionally filtered by keywords
+        Search tweets from a specific user, optionally filtered by keywords and advanced filters
         
         Args:
             username: Twitter handle (without @)
             keywords: List of keywords to filter by
             max_results: Maximum number of tweets to retrieve (10-100)
+            filters: Dict with advanced filters (min_likes, verified_only, has_links, etc.)
         """
-        # First, get the user ID from username
-        user_id = self._get_user_id(username)
-        if not user_id:
+        # First, get the user ID and profile info
+        user_data = self._get_user_info(username)
+        if not user_data:
             return None
+        
+        user_id = user_data['id']
         
         # Build query
         query = f"from:{username}"
@@ -37,35 +41,189 @@ class TwitterScraper:
             keyword_query = " OR ".join([f'"{kw}"' for kw in keywords])
             query = f"({query}) ({keyword_query})"
         
+        # Add advanced filters to query
+        if filters:
+            if filters.get('has_links'):
+                query += " has:links"
+            if filters.get('has_media'):
+                query += " has:media"
+            if filters.get('is_retweet') == False:
+                query += " -is:retweet"
+            if filters.get('min_replies'):
+                query += f" min_replies:{filters['min_replies']}"
+            if filters.get('min_likes'):
+                query += f" min_faves:{filters['min_likes']}"
+            if filters.get('min_retweets'):
+                query += f" min_retweets:{filters['min_retweets']}"
+        
         # Search tweets
         endpoint = f"{self.base_url}/tweets/search/recent"
         params = {
             "query": query,
             "max_results": min(max_results, 100),
-            "tweet.fields": "created_at,public_metrics,text",
-            "expansions": "author_id",
-            "user.fields": "username,name"
+            "tweet.fields": "created_at,public_metrics,text,entities,referenced_tweets",
+            "expansions": "author_id,referenced_tweets.id",
+            "user.fields": "username,name,verified,public_metrics,description,location"
         }
         
         response = requests.get(endpoint, headers=self.headers, params=params)
         
         if response.status_code == 200:
-            return response.json()
+            data = response.json()
+            # Add user profile info to response
+            data['user_profile'] = user_data
+            return data
         else:
             print(f"Error: {response.status_code}")
             print(response.text)
             return None
     
-    def _get_user_id(self, username):
-        """Get user ID from username"""
+    def _get_user_info(self, username):
+        """Get detailed user profile information"""
         endpoint = f"{self.base_url}/users/by/username/{username}"
-        response = requests.get(endpoint, headers=self.headers)
+        params = {
+            "user.fields": "created_at,description,entities,id,location,name,pinned_tweet_id,profile_image_url,protected,public_metrics,url,username,verified,verified_type"
+        }
+        response = requests.get(endpoint, headers=self.headers, params=params)
         
         if response.status_code == 200:
-            return response.json()['data']['id']
+            return response.json()['data']
         else:
-            print(f"Error getting user ID: {response.status_code}")
+            print(f"Error getting user info: {response.status_code}")
             return None
+    
+    def analyze_account_type(self, user_data):
+        """Determine if account is enterprise/business/personal"""
+        description = user_data.get('description', '').lower()
+        name = user_data.get('name', '').lower()
+        metrics = user_data.get('public_metrics', {})
+        
+        # Enterprise indicators
+        enterprise_keywords = ['ceo', 'founder', 'company', 'official', 'corp', 'inc', 'ltd', 
+                              'enterprise', 'business', 'organization', 'team']
+        
+        is_verified = user_data.get('verified', False)
+        follower_count = metrics.get('followers_count', 0)
+        following_count = metrics.get('following_count', 0)
+        
+        # Scoring system
+        score = 0
+        indicators = []
+        
+        if is_verified:
+            score += 3
+            indicators.append('Verified Account')
+        
+        if follower_count > 10000:
+            score += 2
+            indicators.append(f'High Followers ({follower_count:,})')
+        
+        if follower_count > 1000 and following_count < follower_count * 0.5:
+            score += 1
+            indicators.append('Good Follower Ratio')
+        
+        for keyword in enterprise_keywords:
+            if keyword in description or keyword in name:
+                score += 1
+                indicators.append(f'Business Keyword: {keyword}')
+                break
+        
+        # Determine type
+        if score >= 4:
+            account_type = 'Enterprise/Business'
+        elif score >= 2:
+            account_type = 'Professional/Influencer'
+        else:
+            account_type = 'Personal'
+        
+        return {
+            'type': account_type,
+            'score': score,
+            'indicators': indicators,
+            'is_verified': is_verified,
+            'follower_count': follower_count
+        }
+    
+    def calculate_engagement_score(self, tweet):
+        """Calculate engagement score for lead prioritization"""
+        metrics = tweet.get('public_metrics', {})
+        
+        likes = metrics.get('like_count', 0)
+        retweets = metrics.get('retweet_count', 0)
+        replies = metrics.get('reply_count', 0)
+        quotes = metrics.get('quote_count', 0)
+        
+        # Weighted engagement score
+        score = (likes * 1) + (retweets * 3) + (replies * 2) + (quotes * 2)
+        
+        return {
+            'score': score,
+            'likes': likes,
+            'retweets': retweets,
+            'replies': replies,
+            'quotes': quotes
+        }
+    
+    def extract_entities(self, tweet):
+        """Extract URLs, mentions, hashtags from tweet"""
+        entities = tweet.get('entities', {})
+        
+        urls = []
+        if 'urls' in entities:
+            urls = [url['expanded_url'] for url in entities['urls'] if 'expanded_url' in url]
+        
+        mentions = []
+        if 'mentions' in entities:
+            mentions = [mention['username'] for mention in entities['mentions']]
+        
+        hashtags = []
+        if 'hashtags' in entities:
+            hashtags = [tag['tag'] for tag in entities['hashtags']]
+        
+        return {
+            'urls': urls,
+            'mentions': mentions,
+            'hashtags': hashtags,
+            'has_links': len(urls) > 0,
+            'has_mentions': len(mentions) > 0,
+            'has_hashtags': len(hashtags) > 0
+        }
+    
+    def perform_sentiment_analysis(self, text):
+        """Basic sentiment analysis"""
+        # Positive indicators
+        positive_words = ['great', 'excellent', 'amazing', 'love', 'best', 'awesome', 
+                         'fantastic', 'wonderful', 'excited', 'happy', 'success', 'win']
+        
+        # Negative indicators
+        negative_words = ['bad', 'terrible', 'worst', 'hate', 'awful', 'disappointed',
+                         'fail', 'problem', 'issue', 'broken', 'poor', 'sad']
+        
+        # Business opportunity indicators
+        opportunity_words = ['looking for', 'need', 'seeking', 'hiring', 'opportunity',
+                           'help', 'recommend', 'suggestion', 'advice', 'question']
+        
+        text_lower = text.lower()
+        
+        positive_count = sum(1 for word in positive_words if word in text_lower)
+        negative_count = sum(1 for word in negative_words if word in text_lower)
+        opportunity_count = sum(1 for word in opportunity_words if word in text_lower)
+        
+        # Determine sentiment
+        if positive_count > negative_count:
+            sentiment = 'Positive'
+        elif negative_count > positive_count:
+            sentiment = 'Negative'
+        else:
+            sentiment = 'Neutral'
+        
+        return {
+            'sentiment': sentiment,
+            'positive_score': positive_count,
+            'negative_score': negative_count,
+            'opportunity_signals': opportunity_count,
+            'is_opportunity': opportunity_count > 0
+        }
     
     def filter_by_keywords(self, tweets_data, keywords):
         """Filter tweets that contain any of the keywords"""
@@ -83,11 +241,15 @@ class TwitterScraper:
         return filtered
     
     def generate_report(self, tweets_data, username, keywords=None):
-        """Generate a formatted report from tweet data"""
+        """Generate a formatted report from tweet data with advanced analytics"""
         if not tweets_data or 'data' not in tweets_data:
             return "No tweets found."
         
         tweets = tweets_data['data']
+        user_profile = tweets_data.get('user_profile', {})
+        
+        # Analyze account type
+        account_analysis = self.analyze_account_type(user_profile)
         
         # Create reports directory
         os.makedirs('reports', exist_ok=True)
@@ -97,7 +259,7 @@ class TwitterScraper:
         
         with open(filename, 'w', encoding='utf-8') as f:
             f.write("=" * 80 + "\n")
-            f.write(f"TWITTER ANALYSIS REPORT\n")
+            f.write(f"TWITTER LEAD GENERATION REPORT\n")
             f.write(f"Username: @{username}\n")
             f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             if keywords:
@@ -105,18 +267,61 @@ class TwitterScraper:
             f.write(f"Total Tweets Found: {len(tweets)}\n")
             f.write("=" * 80 + "\n\n")
             
-            # Summary statistics
+            # Account Profile Analysis
+            f.write("ACCOUNT PROFILE ANALYSIS\n")
+            f.write("-" * 80 + "\n")
+            f.write(f"Account Type: {account_analysis['type']}\n")
+            f.write(f"Lead Quality Score: {account_analysis['score']}/7\n")
+            f.write(f"Verified: {'Yes' if account_analysis['is_verified'] else 'No'}\n")
+            f.write(f"Followers: {account_analysis['follower_count']:,}\n")
+            f.write(f"Bio: {user_profile.get('description', 'N/A')}\n")
+            f.write(f"Location: {user_profile.get('location', 'N/A')}\n")
+            if user_profile.get('url'):
+                f.write(f"Website: {user_profile.get('url')}\n")
+            f.write(f"\nQuality Indicators:\n")
+            for indicator in account_analysis['indicators']:
+                f.write(f"  • {indicator}\n")
+            f.write("\n")
+            
+            # Engagement Summary
             total_likes = sum(tweet.get('public_metrics', {}).get('like_count', 0) for tweet in tweets)
             total_retweets = sum(tweet.get('public_metrics', {}).get('retweet_count', 0) for tweet in tweets)
             total_replies = sum(tweet.get('public_metrics', {}).get('reply_count', 0) for tweet in tweets)
             
-            f.write("SUMMARY STATISTICS\n")
+            # Calculate engagement scores
+            engagement_scores = [self.calculate_engagement_score(tweet) for tweet in tweets]
+            avg_engagement = sum(e['score'] for e in engagement_scores) / len(engagement_scores) if engagement_scores else 0
+            
+            f.write("ENGAGEMENT SUMMARY\n")
             f.write("-" * 80 + "\n")
-            f.write(f"Total Likes: {total_likes}\n")
-            f.write(f"Total Retweets: {total_retweets}\n")
-            f.write(f"Total Replies: {total_replies}\n")
+            f.write(f"Total Likes: {total_likes:,}\n")
+            f.write(f"Total Retweets: {total_retweets:,}\n")
+            f.write(f"Total Replies: {total_replies:,}\n")
             f.write(f"Average Likes per Tweet: {total_likes/len(tweets):.2f}\n")
-            f.write(f"Average Retweets per Tweet: {total_retweets/len(tweets):.2f}\n\n")
+            f.write(f"Average Retweets per Tweet: {total_retweets/len(tweets):.2f}\n")
+            f.write(f"Average Engagement Score: {avg_engagement:.2f}\n\n")
+            
+            # Content Analysis
+            tweets_with_links = sum(1 for tweet in tweets if self.extract_entities(tweet)['has_links'])
+            tweets_with_mentions = sum(1 for tweet in tweets if self.extract_entities(tweet)['has_mentions'])
+            
+            f.write("CONTENT ANALYSIS\n")
+            f.write("-" * 80 + "\n")
+            f.write(f"Tweets with Links: {tweets_with_links} ({tweets_with_links/len(tweets)*100:.1f}%)\n")
+            f.write(f"Tweets with Mentions: {tweets_with_mentions} ({tweets_with_mentions/len(tweets)*100:.1f}%)\n")
+            
+            # Sentiment Analysis
+            sentiments = [self.perform_sentiment_analysis(tweet['text']) for tweet in tweets]
+            positive_count = sum(1 for s in sentiments if s['sentiment'] == 'Positive')
+            negative_count = sum(1 for s in sentiments if s['sentiment'] == 'Negative')
+            neutral_count = sum(1 for s in sentiments if s['sentiment'] == 'Neutral')
+            opportunity_count = sum(1 for s in sentiments if s['is_opportunity'])
+            
+            f.write(f"\nSentiment Distribution:\n")
+            f.write(f"  Positive: {positive_count} ({positive_count/len(tweets)*100:.1f}%)\n")
+            f.write(f"  Neutral: {neutral_count} ({neutral_count/len(tweets)*100:.1f}%)\n")
+            f.write(f"  Negative: {negative_count} ({negative_count/len(tweets)*100:.1f}%)\n")
+            f.write(f"  Opportunity Signals: {opportunity_count} tweets\n\n")
             
             # Keyword analysis
             if keywords:
@@ -127,18 +332,68 @@ class TwitterScraper:
                     f.write(f"'{keyword}': {count} mentions\n")
                 f.write("\n")
             
-            # Individual tweets
-            f.write("DETAILED TWEETS\n")
+            # Top Performing Tweets (by engagement score)
+            tweets_with_scores = [(tweet, self.calculate_engagement_score(tweet)) for tweet in tweets]
+            top_tweets = sorted(tweets_with_scores, key=lambda x: x[1]['score'], reverse=True)[:5]
+            
+            f.write("TOP 5 PERFORMING TWEETS\n")
+            f.write("-" * 80 + "\n")
+            for i, (tweet, score) in enumerate(top_tweets, 1):
+                f.write(f"\n#{i} - Engagement Score: {score['score']}\n")
+                f.write(f"Date: {tweet.get('created_at', 'N/A')}\n")
+                f.write(f"Text: {tweet['text'][:200]}{'...' if len(tweet['text']) > 200 else ''}\n")
+                f.write(f"Likes: {score['likes']} | Retweets: {score['retweets']} | Replies: {score['replies']}\n")
+                
+                entities = self.extract_entities(tweet)
+                if entities['urls']:
+                    f.write(f"Links: {', '.join(entities['urls'][:2])}\n")
+                f.write("-" * 80 + "\n")
+            
+            # Opportunity Tweets (tweets with buying signals)
+            opportunity_tweets = [(tweet, self.perform_sentiment_analysis(tweet['text'])) 
+                                 for tweet in tweets 
+                                 if self.perform_sentiment_analysis(tweet['text'])['is_opportunity']]
+            
+            if opportunity_tweets:
+                f.write("\nLEAD OPPORTUNITY TWEETS\n")
+                f.write("-" * 80 + "\n")
+                for tweet, sentiment in opportunity_tweets[:5]:
+                    f.write(f"\nDate: {tweet.get('created_at', 'N/A')}\n")
+                    f.write(f"Text: {tweet['text']}\n")
+                    f.write(f"Opportunity Signals: {sentiment['opportunity_signals']}\n")
+                    metrics = tweet.get('public_metrics', {})
+                    f.write(f"Engagement: {metrics.get('like_count', 0)} likes, {metrics.get('reply_count', 0)} replies\n")
+                    f.write("-" * 80 + "\n")
+            
+            # Detailed tweets section
+            f.write("\n\nDETAILED TWEET ANALYSIS\n")
             f.write("-" * 80 + "\n\n")
             
             for i, tweet in enumerate(tweets, 1):
+                sentiment = self.perform_sentiment_analysis(tweet['text'])
+                entities = self.extract_entities(tweet)
+                engagement = self.calculate_engagement_score(tweet)
+                
                 f.write(f"Tweet #{i}\n")
                 f.write(f"Date: {tweet.get('created_at', 'N/A')}\n")
                 f.write(f"Text: {tweet['text']}\n")
+                f.write(f"Sentiment: {sentiment['sentiment']}")
+                if sentiment['is_opportunity']:
+                    f.write(" 🎯 OPPORTUNITY")
+                f.write("\n")
+                f.write(f"Engagement Score: {engagement['score']}\n")
                 metrics = tweet.get('public_metrics', {})
                 f.write(f"Likes: {metrics.get('like_count', 0)} | ")
                 f.write(f"Retweets: {metrics.get('retweet_count', 0)} | ")
                 f.write(f"Replies: {metrics.get('reply_count', 0)}\n")
+                
+                if entities['urls']:
+                    f.write(f"Links: {', '.join(entities['urls'])}\n")
+                if entities['mentions']:
+                    f.write(f"Mentions: @{', @'.join(entities['mentions'])}\n")
+                if entities['hashtags']:
+                    f.write(f"Hashtags: #{', #'.join(entities['hashtags'])}\n")
+                
                 f.write("-" * 80 + "\n\n")
         
         print(f"Report saved to: {filename}")

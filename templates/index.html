@@ -44,6 +44,59 @@
                         <small>Leave empty to get all recent tweets</small>
                     </div>
 
+                    <div class="advanced-filters">
+                        <h3>🎯 Advanced Filters (Lead Generation)</h3>
+                        
+                        <div class="filter-row">
+                            <div class="form-group">
+                                <label for="min-likes">Minimum Likes</label>
+                                <input 
+                                    type="number" 
+                                    id="min-likes" 
+                                    placeholder="e.g., 10"
+                                    min="0"
+                                >
+                            </div>
+
+                            <div class="form-group">
+                                <label for="min-retweets">Minimum Retweets</label>
+                                <input 
+                                    type="number" 
+                                    id="min-retweets" 
+                                    placeholder="e.g., 5"
+                                    min="0"
+                                >
+                            </div>
+
+                            <div class="form-group">
+                                <label for="min-replies">Minimum Replies</label>
+                                <input 
+                                    type="number" 
+                                    id="min-replies" 
+                                    placeholder="e.g., 2"
+                                    min="0"
+                                >
+                            </div>
+                        </div>
+
+                        <div class="filter-checkboxes">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="has-links">
+                                <span>Only tweets with links</span>
+                            </label>
+                            
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="has-media">
+                                <span>Only tweets with media</span>
+                            </label>
+                            
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="no-retweets">
+                                <span>Exclude retweets</span>
+                            </label>
+                        </div>
+                    </div>
+
                     <button type="submit" id="submitBtn" class="btn-primary">
                         <span id="btnText">Generate Report</span>
                         <span id="btnLoader" class="loader" style="display: none;"></span>

@@ -6,6 +6,20 @@ document.getElementById('scrapeForm').addEventListener('submit', async (e) => {
     const username = document.getElementById('username').value.trim();
     const keywords = document.getElementById('keywords').value.trim();
     
+    // Collect advanced filters
+    const filters = {};
+    const minLikes = document.getElementById('min-likes').value;
+    const minRetweets = document.getElementById('min-retweets').value;
+    const minReplies = document.getElementById('min-replies').value;
+    
+    if (minLikes) filters.min_likes = parseInt(minLikes);
+    if (minRetweets) filters.min_retweets = parseInt(minRetweets);
+    if (minReplies) filters.min_replies = parseInt(minReplies);
+    
+    filters.has_links = document.getElementById('has-links').checked;
+    filters.has_media = document.getElementById('has-media').checked;
+    filters.is_retweet = !document.getElementById('no-retweets').checked;
+    
     const submitBtn = document.getElementById('submitBtn');
     const btnText = document.getElementById('btnText');
     const btnLoader = document.getElementById('btnLoader');
@@ -27,7 +41,7 @@ document.getElementById('scrapeForm').addEventListener('submit', async (e) => {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ username, keywords })
+            body: JSON.stringify({ username, keywords, filters })
         });
         
         const data = await response.json();
@@ -39,9 +53,16 @@ document.getElementById('scrapeForm').addEventListener('submit', async (e) => {
             console.log('Report generated successfully');
             console.log('Report content length:', currentReportContent.length);
             
-            // Show success
-            document.getElementById('resultMessage').textContent = 
-                `Found ${data.tweet_count} tweets from @${username}`;
+            // Show success with lead quality info
+            let message = `Found ${data.tweet_count} tweets from @${username}`;
+            if (data.account_type) {
+                message += ` | Account Type: ${data.account_type}`;
+            }
+            if (data.lead_score) {
+                message += ` | Lead Score: ${data.lead_score}/7`;
+            }
+            
+            document.getElementById('resultMessage').textContent = message;
             
             document.getElementById('downloadTxt').href = `/download/${data.report_file}`;
             document.getElementById('downloadJson').href = `/download/${data.json_file}`;
