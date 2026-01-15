@@ -5,20 +5,33 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 
 # Get database URL from environment variable (Railway provides this automatically)
-DATABASE_URL = os.getenv('DATABASE_URL')
+# Try multiple possible environment variable names
+DATABASE_URL = os.getenv('DATABASE_URL') or os.getenv('DATABASE_PRIVATE_URL') or os.getenv('POSTGRES_URL')
+
+print(f"[DATABASE] Checking for database connection...")
+print(f"[DATABASE] DATABASE_URL exists: {bool(os.getenv('DATABASE_URL'))}")
+print(f"[DATABASE] DATABASE_PRIVATE_URL exists: {bool(os.getenv('DATABASE_PRIVATE_URL'))}")
 
 # Handle Railway's postgres:// vs postgresql:// URL format
-if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
-    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
-
-# Fallback to SQLite for local development
-if not DATABASE_URL:
+if DATABASE_URL:
+    if DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    print(f"[DATABASE] Using PostgreSQL database")
+    print(f"[DATABASE] Connection string: {DATABASE_URL[:30]}...")  # Only show first 30 chars for security
+else:
     DATABASE_URL = 'sqlite:///twitter_scraper.db'
-    print("Using SQLite for local development")
+    print("[DATABASE] ⚠️ WARNING: Using SQLite for local development")
+    print("[DATABASE] ⚠️ Data will NOT persist on Railway!")
+    print("[DATABASE] ⚠️ Please ensure PostgreSQL is properly connected")
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+try:
+    engine = create_engine(DATABASE_URL)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Base = declarative_base()
+    print("[DATABASE] ✓ Database engine created successfully")
+except Exception as e:
+    print(f"[DATABASE] ✗ Error creating database engine: {e}")
+    raise
 
 # Database Models
 

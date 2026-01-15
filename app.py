@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from twitter_scraper import TwitterScraper
 from scheduler import ScheduledScraper
-from database import init_db, get_db_session, Report, Schedule as DBSchedule, HistoricalTweet
+from database import init_db, get_db_session, Report, Schedule as DBSchedule, HistoricalTweet, engine
 
 app = Flask(__name__)
 
@@ -19,6 +19,36 @@ scheduler.start()
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/health')
+def health():
+    """Health check endpoint to verify database connection"""
+    try:
+        db = get_db_session()
+        try:
+            # Try to query database
+            db.execute('SELECT 1')
+            db_status = 'connected'
+            db_type = 'PostgreSQL' if 'postgresql' in str(engine.url) else 'SQLite'
+        except Exception as e:
+            db_status = f'error: {str(e)}'
+            db_type = 'unknown'
+        finally:
+            db.close()
+        
+        return jsonify({
+            'status': 'healthy',
+            'database': {
+                'status': db_status,
+                'type': db_type,
+                'url_set': bool(os.getenv('DATABASE_URL'))
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e)
+        }), 500
 
 @app.route('/scrape', methods=['POST'])
 def scrape():
