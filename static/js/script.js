@@ -366,3 +366,27 @@ originalTabSwitching.forEach(btn => {
         }
     });
 });
+
+
+// Update timezone display
+function updateTimeDisplay() {
+    const now = new Date();
+    
+    // UTC time
+    const utcTime = now.toUTCString().split(' ')[4]; // HH:MM:SS
+    const utcElement = document.getElementById('utc-time');
+    if (utcElement) {
+        utcElement.textContent = utcTime;
+    }
+    
+    // Local time
+    const localTime = now.toLocaleTimeString();
+    const localElement = document.getElementById('local-time');
+    if (localElement) {
+        localElement.textContent = localTime;
+    }
+}
+
+// Update time every second
+setInterval(updateTimeDisplay, 1000);
+updateTimeDisplay(); // Initial call

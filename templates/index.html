@@ -149,6 +149,15 @@
                 <h2>📅 Schedule Automatic Scraping</h2>
                 <p>Build historical data by scheduling regular scrapes (works around 7-day API limit)</p>
                 
+                <div class="timezone-notice">
+                    ⏰ <strong>Timezone:</strong> All times are in <strong>UTC</strong> (Coordinated Universal Time)
+                    <br>
+                    <small>
+                        Current UTC time: <span id="utc-time"></span> | 
+                        Your local time: <span id="local-time"></span>
+                    </small>
+                </div>
+                
                 <form id="scheduleForm">
                     <div class="form-group">
                         <label for="schedule-username">Twitter Handle</label>
