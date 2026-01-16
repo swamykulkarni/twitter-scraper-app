@@ -30,9 +30,18 @@ def health():
             db.execute('SELECT 1')
             db_status = 'connected'
             db_type = 'PostgreSQL' if 'postgresql' in str(engine.url) else 'SQLite'
+            
+            # Count records
+            schedules_count = db.query(DBSchedule).count()
+            reports_count = db.query(Report).count()
+            tweets_count = db.query(HistoricalTweet).count()
+            
         except Exception as e:
             db_status = f'error: {str(e)}'
             db_type = 'unknown'
+            schedules_count = 0
+            reports_count = 0
+            tweets_count = 0
         finally:
             db.close()
         
@@ -41,7 +50,14 @@ def health():
             'database': {
                 'status': db_status,
                 'type': db_type,
-                'url_set': bool(os.getenv('DATABASE_URL'))
+                'url_set': bool(os.getenv('DATABASE_URL')),
+                'connection_string': str(engine.url)[:50] + '...'
+            },
+            'data': {
+                'schedules': schedules_count,
+                'reports': reports_count,
+                'historical_tweets': tweets_count,
+                'total_records': schedules_count + reports_count + tweets_count
             }
         })
     except Exception as e:
