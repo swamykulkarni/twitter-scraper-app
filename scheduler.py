@@ -42,42 +42,136 @@ class ScheduledScraper:
     def run_scrape(self, schedule_config):
         """Execute a scheduled scrape"""
         try:
-            from database import get_db_session, Schedule as DBSchedule, HistoricalTweet
+            from database import get_db_session, Schedule as DBSchedule, HistoricalTweet, Report
             
             username = schedule_config['username']
             keywords = schedule_config.get('keywords')
+            frequency = schedule_config.get('frequency')
             
             print(f"Running scheduled scrape for @{username}...")
             tweets_data = self.scraper.search_user_tweets(username, keywords=keywords, max_results=100)
             
             if tweets_data and 'data' in tweets_data:
-                # Generate report
+                # Generate report file
                 report_file = self.scraper.generate_report(tweets_data, username, keywords)
+                
+                # Read report content
+                with open(report_file, 'r', encoding='utf-8') as f:
+                    report_content = f.read()
+                
+                # Get account analysis
+                user_profile = tweets_data.get('user_profile', {})
+                account_analysis = self.scraper.analyze_account_type(user_profile) if user_profile else {}
                 
                 # Save to historical data in database
                 self.save_historical_data(username, tweets_data)
                 
-                # Update last run time in database
+                # Save report to database
                 db = get_db_session()
                 try:
+                    # Save report
+                    db_report = Report(
+                        username=username,
+                        keywords=keywords,
+                        tweet_count=len(tweets_data['data']),
+                        account_type=account_analysis.get('type'),
+                        lead_score=account_analysis.get('score'),
+                        report_content=report_content,
+                        tweets_data=tweets_data,
+                        filters={}
+                    )
+                    db.add(db_report)
+                    
+                    # Update schedule last run time and next run time
                     schedule_db = db.query(DBSchedule).filter(DBSchedule.id == schedule_config['id']).first()
                     if schedule_db:
-                        schedule_db.last_run = datetime.utcnow()
-                        db.commit()
+                        now = datetime.utcnow()
+                        schedule_db.last_run = now
+                        
+                        # Calculate next run time based on frequency
+                        if frequency == 'once':
+                            # One-time schedule - disable it
+                            schedule_db.enabled = False
+                            schedule_db.next_run = None
+                            print(f"One-time schedule completed, disabling schedule {schedule_config['id']}")
+                        else:
+                            # Calculate next run for recurring schedules
+                            next_run = self.calculate_next_run(schedule_db.start_datetime, frequency, schedule_db.day)
+                            schedule_db.next_run = next_run
+                            print(f"Next run scheduled for: {next_run}")
                         
                         # Update in-memory schedule
                         for s in self.schedules:
                             if s['id'] == schedule_config['id']:
-                                s['last_run'] = datetime.utcnow().isoformat()
+                                s['last_run'] = now.isoformat()
+                                if frequency == 'once':
+                                    s['enabled'] = False
+                                    s['next_run'] = None
+                                else:
+                                    s['next_run'] = next_run.isoformat() if next_run else None
+                    
+                    db.commit()
+                    print(f"✓ Scheduled scrape completed and saved to database: {report_file}")
                 finally:
                     db.close()
-                
-                print(f"✓ Scheduled scrape completed: {report_file}")
             else:
                 print(f"✗ No tweets found for @{username}")
         
         except Exception as e:
             print(f"Error in scheduled scrape: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def calculate_next_run(self, start_datetime, frequency, day=None):
+        """Calculate the next run time based on frequency"""
+        now = datetime.utcnow()
+        
+        if frequency == 'hourly':
+            # Next run is at the same minute of the next hour
+            next_run = now.replace(second=0, microsecond=0)
+            next_run = next_run.replace(minute=start_datetime.minute)
+            if next_run <= now:
+                next_run = next_run.replace(hour=next_run.hour + 1)
+            return next_run
+        
+        elif frequency == 'daily':
+            # Next run is at the same time tomorrow
+            next_run = now.replace(
+                hour=start_datetime.hour,
+                minute=start_datetime.minute,
+                second=0,
+                microsecond=0
+            )
+            if next_run <= now:
+                # If time has passed today, schedule for tomorrow
+                from datetime import timedelta
+                next_run = next_run + timedelta(days=1)
+            return next_run
+        
+        elif frequency == 'weekly':
+            # Next run is on the specified day at the specified time
+            from datetime import timedelta
+            days_of_week = {
+                'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+                'friday': 4, 'saturday': 5, 'sunday': 6
+            }
+            target_day = days_of_week.get(day.lower(), 0)
+            current_day = now.weekday()
+            
+            days_ahead = target_day - current_day
+            if days_ahead <= 0:  # Target day already happened this week
+                days_ahead += 7
+            
+            next_run = now + timedelta(days=days_ahead)
+            next_run = next_run.replace(
+                hour=start_datetime.hour,
+                minute=start_datetime.minute,
+                second=0,
+                microsecond=0
+            )
+            return next_run
+        
+        return None
     
     def save_historical_data(self, username, tweets_data):
         """Save tweets to database"""
