@@ -6,11 +6,25 @@ from datetime import datetime
 
 # Get database URL from environment variable (Railway provides this automatically)
 # Try multiple possible environment variable names
-DATABASE_URL = os.getenv('DATABASE_URL') or os.getenv('DATABASE_PRIVATE_URL') or os.getenv('POSTGRES_URL')
-
 print(f"[DATABASE] Checking for database connection...")
+print(f"[DATABASE] Environment variables containing 'DATABASE' or 'POSTGRES':")
+for key in os.environ.keys():
+    if 'DATABASE' in key.upper() or 'POSTGRES' in key.upper() or 'PG' in key.upper():
+        # Show key and first 20 chars of value for security
+        value = os.environ[key]
+        display_value = value[:20] + '...' if len(value) > 20 else value
+        print(f"[DATABASE]   {key} = {display_value}")
 print(f"[DATABASE] DATABASE_URL exists: {bool(os.getenv('DATABASE_URL'))}")
 print(f"[DATABASE] DATABASE_PRIVATE_URL exists: {bool(os.getenv('DATABASE_PRIVATE_URL'))}")
+print(f"[DATABASE] POSTGRES_URL exists: {bool(os.getenv('POSTGRES_URL'))}")
+print(f"[DATABASE] DATABASE_PUBLIC_URL exists: {bool(os.getenv('DATABASE_PUBLIC_URL'))}")
+
+DATABASE_URL = (
+    os.getenv('DATABASE_URL') or 
+    os.getenv('DATABASE_PRIVATE_URL') or 
+    os.getenv('POSTGRES_URL') or
+    os.getenv('DATABASE_PUBLIC_URL')
+)
 
 # Handle Railway's postgres:// vs postgresql:// URL format
 if DATABASE_URL:
