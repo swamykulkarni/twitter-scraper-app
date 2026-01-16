@@ -2,6 +2,8 @@
 
 A comprehensive social media intelligence platform for lead generation, market research, and competitive analysis.
 
+**Version:** 1.0.1
+
 ## 🎯 Features
 
 ### Core Capabilities
