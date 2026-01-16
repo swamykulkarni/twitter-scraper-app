@@ -55,11 +55,12 @@ class Schedule(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, nullable=False)
     keywords = Column(JSON)  # Store as JSON array
-    frequency = Column(String, nullable=False)  # hourly, daily, weekly
-    time = Column(String)  # HH:MM format
+    frequency = Column(String, nullable=False)  # once, hourly, daily, weekly
+    start_datetime = Column(DateTime, nullable=False)  # When to start (UTC)
     day = Column(String)  # For weekly schedules
     enabled = Column(Boolean, default=True)
     last_run = Column(DateTime)
+    next_run = Column(DateTime)  # Calculated next run time
     created_at = Column(DateTime, default=datetime.utcnow)
     
     def to_dict(self):
@@ -68,10 +69,11 @@ class Schedule(Base):
             'username': self.username,
             'keywords': self.keywords,
             'frequency': self.frequency,
-            'time': self.time,
+            'start_datetime': self.start_datetime.isoformat() if self.start_datetime else None,
             'day': self.day,
             'enabled': self.enabled,
             'last_run': self.last_run.isoformat() if self.last_run else None,
+            'next_run': self.next_run.isoformat() if self.next_run else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

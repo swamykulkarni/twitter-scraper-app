@@ -112,35 +112,106 @@ class ScheduledScraper:
             print(f"Error saving historical data: {e}")
     
     def setup_schedule(self, schedule_config):
-        """Setup a single schedule"""
+        """Setup a single schedule with start datetime"""
         if not schedule_config.get('enabled'):
             return
         
         frequency = schedule_config['frequency']
-        time_str = schedule_config.get('time', '09:00')
+        start_datetime_str = schedule_config.get('start_datetime')
         day = schedule_config.get('day')
         
-        if frequency == 'hourly':
-            schedule.every().hour.do(self.run_scrape, schedule_config)
-        elif frequency == 'daily':
-            schedule.every().day.at(time_str).do(self.run_scrape, schedule_config)
-        elif frequency == 'weekly':
-            if day == 'monday':
-                schedule.every().monday.at(time_str).do(self.run_scrape, schedule_config)
-            elif day == 'tuesday':
-                schedule.every().tuesday.at(time_str).do(self.run_scrape, schedule_config)
-            elif day == 'wednesday':
-                schedule.every().wednesday.at(time_str).do(self.run_scrape, schedule_config)
-            elif day == 'thursday':
-                schedule.every().thursday.at(time_str).do(self.run_scrape, schedule_config)
-            elif day == 'friday':
-                schedule.every().friday.at(time_str).do(self.run_scrape, schedule_config)
-            elif day == 'saturday':
-                schedule.every().saturday.at(time_str).do(self.run_scrape, schedule_config)
-            elif day == 'sunday':
-                schedule.every().sunday.at(time_str).do(self.run_scrape, schedule_config)
+        if not start_datetime_str:
+            print(f"Warning: Schedule {schedule_config.get('id')} has no start_datetime")
+            return
+        
+        # Parse start datetime
+        try:
+            start_datetime = datetime.fromisoformat(start_datetime_str.replace('Z', '+00:00').replace('+00:00', ''))
+        except (ValueError, AttributeError) as e:
+            print(f"Error parsing start_datetime: {e}")
+            return
+        
+        # Check if start time has passed
+        now = datetime.utcnow()
+        if start_datetime > now:
+            # Schedule hasn't started yet - schedule the first run
+            time_str = start_datetime.strftime('%H:%M')
+            
+            if frequency == 'once':
+                # One-time schedule
+                schedule.every().day.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+            elif frequency == 'hourly':
+                # For hourly, schedule at the start time, then every hour
+                schedule.every().hour.at(f":{start_datetime.strftime('%M')}").do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+            elif frequency == 'daily':
+                schedule.every().day.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+            elif frequency == 'weekly':
+                if day == 'monday':
+                    schedule.every().monday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                elif day == 'tuesday':
+                    schedule.every().tuesday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                elif day == 'wednesday':
+                    schedule.every().wednesday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                elif day == 'thursday':
+                    schedule.every().thursday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                elif day == 'friday':
+                    schedule.every().friday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                elif day == 'saturday':
+                    schedule.every().saturday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                elif day == 'sunday':
+                    schedule.every().sunday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                else:
+                    schedule.every().week.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+            
+            print(f"Scheduled: @{schedule_config['username']} - {frequency} starting at {start_datetime}")
+        else:
+            # Start time has passed - check if we should still run based on frequency
+            if frequency == 'once':
+                # One-time schedule that already passed - disable it
+                print(f"One-time schedule {schedule_config['id']} has passed, disabling")
+                self.disable_schedule(schedule_config['id'])
             else:
-                schedule.every().week.at(time_str).do(self.run_scrape, schedule_config)
+                # Recurring schedule - set it up normally
+                time_str = start_datetime.strftime('%H:%M')
+                
+                if frequency == 'hourly':
+                    schedule.every().hour.at(f":{start_datetime.strftime('%M')}").do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                elif frequency == 'daily':
+                    schedule.every().day.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                elif frequency == 'weekly':
+                    if day == 'monday':
+                        schedule.every().monday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                    elif day == 'tuesday':
+                        schedule.every().tuesday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                    elif day == 'wednesday':
+                        schedule.every().wednesday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                    elif day == 'thursday':
+                        schedule.every().thursday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                    elif day == 'friday':
+                        schedule.every().friday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                    elif day == 'saturday':
+                        schedule.every().saturday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                    elif day == 'sunday':
+                        schedule.every().sunday.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                    else:
+                        schedule.every().week.at(time_str).do(self.run_scrape, schedule_config).tag(f"schedule_{schedule_config['id']}")
+                
+                print(f"Scheduled (recurring): @{schedule_config['username']} - {frequency} at {time_str}")
+    
+    def disable_schedule(self, schedule_id):
+        """Disable a schedule in the database"""
+        try:
+            from database import get_db_session, Schedule as DBSchedule
+            db = get_db_session()
+            try:
+                schedule_db = db.query(DBSchedule).filter(DBSchedule.id == schedule_id).first()
+                if schedule_db:
+                    schedule_db.enabled = False
+                    db.commit()
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"Error disabling schedule: {e}")
     
     def setup_all_schedules(self):
         """Setup all schedules"""

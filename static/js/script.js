@@ -151,17 +151,38 @@ document.addEventListener('DOMContentLoaded', () => {
 // Show/hide day selector based on frequency
 document.getElementById('schedule-frequency').addEventListener('change', (e) => {
     const daySelector = document.getElementById('day-selector');
-    const timeSelector = document.getElementById('time-selector');
     
     if (e.target.value === 'weekly') {
         daySelector.style.display = 'block';
-        timeSelector.style.display = 'block';
-    } else if (e.target.value === 'hourly') {
-        daySelector.style.display = 'none';
-        timeSelector.style.display = 'none';
     } else {
         daySelector.style.display = 'none';
-        timeSelector.style.display = 'block';
+    }
+});
+
+// Set minimum datetime to current time on page load
+document.addEventListener('DOMContentLoaded', () => {
+    const datetimeInput = document.getElementById('schedule-start-datetime');
+    if (datetimeInput) {
+        // Set min to current UTC time
+        const now = new Date();
+        const year = now.getUTCFullYear();
+        const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(now.getUTCDate()).padStart(2, '0');
+        const hours = String(now.getUTCHours()).padStart(2, '0');
+        const minutes = String(now.getUTCMinutes()).padStart(2, '0');
+        
+        const minDatetime = `${year}-${month}-${day}T${hours}:${minutes}`;
+        datetimeInput.min = minDatetime;
+        
+        // Set default to 5 minutes from now
+        const defaultTime = new Date(now.getTime() + 5 * 60000);
+        const defaultYear = defaultTime.getUTCFullYear();
+        const defaultMonth = String(defaultTime.getUTCMonth() + 1).padStart(2, '0');
+        const defaultDay = String(defaultTime.getUTCDate()).padStart(2, '0');
+        const defaultHours = String(defaultTime.getUTCHours()).padStart(2, '0');
+        const defaultMinutes = String(defaultTime.getUTCMinutes()).padStart(2, '0');
+        
+        datetimeInput.value = `${defaultYear}-${defaultMonth}-${defaultDay}T${defaultHours}:${defaultMinutes}`;
     }
 });
 
@@ -172,14 +193,29 @@ document.getElementById('scheduleForm').addEventListener('submit', async (e) => 
     const username = document.getElementById('schedule-username').value.trim();
     const keywords = document.getElementById('schedule-keywords').value.trim();
     const frequency = document.getElementById('schedule-frequency').value;
-    const time = document.getElementById('schedule-time').value;
+    const startDatetime = document.getElementById('schedule-start-datetime').value;
     const day = document.getElementById('schedule-day').value;
+    
+    // Validate start datetime is in the future
+    const startDate = new Date(startDatetime + 'Z'); // Add Z to indicate UTC
+    const now = new Date();
+    
+    if (startDate <= now) {
+        alert('⚠️ Start date/time must be in the future (UTC time)');
+        return;
+    }
     
     try {
         const response = await fetch('/schedules', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, keywords, frequency, time, day })
+            body: JSON.stringify({ 
+                username, 
+                keywords, 
+                frequency, 
+                start_datetime: startDatetime,
+                day 
+            })
         });
         
         const data = await response.json();
@@ -187,6 +223,16 @@ document.getElementById('scheduleForm').addEventListener('submit', async (e) => 
         if (response.ok) {
             alert('✓ Schedule added successfully!');
             document.getElementById('scheduleForm').reset();
+            // Reset datetime to default (5 minutes from now)
+            const datetimeInput = document.getElementById('schedule-start-datetime');
+            const defaultTime = new Date(new Date().getTime() + 5 * 60000);
+            const year = defaultTime.getUTCFullYear();
+            const month = String(defaultTime.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(defaultTime.getUTCDate()).padStart(2, '0');
+            const hours = String(defaultTime.getUTCHours()).padStart(2, '0');
+            const minutes = String(defaultTime.getUTCMinutes()).padStart(2, '0');
+            datetimeInput.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+            
             loadSchedules();
         } else {
             alert('Error: ' + data.error);
@@ -221,32 +267,72 @@ async function loadSchedules() {
         }
         
         container.innerHTML = data.schedules.map(schedule => {
-            let scheduleText = schedule.frequency;
+            // Format frequency text
+            let frequencyText = schedule.frequency.charAt(0).toUpperCase() + schedule.frequency.slice(1);
             if (schedule.frequency === 'weekly' && schedule.day) {
-                scheduleText = `Weekly on ${schedule.day.charAt(0).toUpperCase() + schedule.day.slice(1)}`;
-            }
-            if (schedule.time && schedule.frequency !== 'hourly') {
-                scheduleText += ` at ${schedule.time}`;
+                frequencyText = `Weekly on ${schedule.day.charAt(0).toUpperCase() + schedule.day.slice(1)}`;
+            } else if (schedule.frequency === 'once') {
+                frequencyText = 'One-time';
             }
             
-            // Calculate next run time
-            let nextRunText = '';
-            if (schedule.last_run) {
-                const lastRun = new Date(schedule.last_run);
-                nextRunText = `Last run: ${lastRun.toLocaleString()}`;
-            } else {
-                nextRunText = 'Never run yet';
+            // Format start datetime
+            let startDateText = '';
+            if (schedule.start_datetime) {
+                const startDate = new Date(schedule.start_datetime + 'Z');
+                startDateText = startDate.toLocaleString('en-US', { 
+                    timeZone: 'UTC',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                }) + ' UTC';
             }
+            
+            // Format next run time
+            let nextRunText = '';
+            if (schedule.next_run) {
+                const nextRun = new Date(schedule.next_run + 'Z');
+                const now = new Date();
+                const diffMs = nextRun - now;
+                const diffMins = Math.floor(diffMs / 60000);
+                
+                if (diffMins < 0) {
+                    nextRunText = '<span style="color: #f39c12;">Pending...</span>';
+                } else if (diffMins < 60) {
+                    nextRunText = `<span style="color: #27ae60;">In ${diffMins} minute${diffMins !== 1 ? 's' : ''}</span>`;
+                } else if (diffMins < 1440) {
+                    const hours = Math.floor(diffMins / 60);
+                    nextRunText = `<span style="color: #3498db;">In ${hours} hour${hours !== 1 ? 's' : ''}</span>`;
+                } else {
+                    const days = Math.floor(diffMins / 1440);
+                    nextRunText = `<span style="color: #9b59b6;">In ${days} day${days !== 1 ? 's' : ''}</span>`;
+                }
+            } else if (schedule.start_datetime) {
+                nextRunText = `<span style="color: #3498db;">First run: ${startDateText}</span>`;
+            }
+            
+            // Format last run
+            let lastRunText = schedule.last_run ? 
+                `Last run: ${new Date(schedule.last_run + 'Z').toLocaleString('en-US', { timeZone: 'UTC' })} UTC` : 
+                'Never run';
+            
+            const keywordsText = schedule.keywords && schedule.keywords.length > 0 ? 
+                schedule.keywords.join(', ') : 
+                'All tweets';
             
             return `
                 <div class="schedule-item">
                     <div class="schedule-info">
                         <strong>@${schedule.username}</strong>
-                        ${schedule.keywords ? `<span style="color: #666;"> • Keywords: ${schedule.keywords.join(', ')}</span>` : ''}
+                        <span style="color: #666;"> • Keywords: ${keywordsText}</span>
                         <div class="schedule-meta">
-                            📅 ${scheduleText}
+                            📅 ${frequencyText}
                             <br>
-                            ⏱️ ${nextRunText}
+                            ⏱️ Next run: ${nextRunText}
+                            <br>
+                            <small style="color: #999;">${lastRunText}</small>
                         </div>
                     </div>
                     <button class="btn-delete" data-schedule-id="${schedule.id}">Delete</button>

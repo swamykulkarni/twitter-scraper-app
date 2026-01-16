@@ -180,12 +180,26 @@
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="schedule-frequency">Frequency</label>
+                            <label for="schedule-start-datetime">Start Date & Time (UTC)</label>
+                            <input 
+                                type="datetime-local" 
+                                id="schedule-start-datetime"
+                                required
+                            >
+                            <small>First run will be at this date/time</small>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="schedule-frequency">Repeat Frequency</label>
                             <select id="schedule-frequency">
+                                <option value="once">Once (no repeat)</option>
                                 <option value="hourly">Every Hour</option>
                                 <option value="daily">Daily</option>
                                 <option value="weekly">Weekly</option>
                             </select>
+                            <small>How often to repeat after the start time</small>
                         </div>
 
                         <div class="form-group" id="day-selector" style="display: none;">
@@ -199,15 +213,6 @@
                                 <option value="saturday">Saturday</option>
                                 <option value="sunday">Sunday</option>
                             </select>
-                        </div>
-
-                        <div class="form-group" id="time-selector">
-                            <label for="schedule-time">Time</label>
-                            <input 
-                                type="time" 
-                                id="schedule-time" 
-                                value="09:00"
-                            >
                         </div>
                     </div>
 

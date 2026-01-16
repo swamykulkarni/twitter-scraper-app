@@ -207,13 +207,26 @@ def add_schedule():
         username = data.get('username', '').strip()
         keywords_input = data.get('keywords', '').strip()
         frequency = data.get('frequency', 'daily')
-        time_str = data.get('time', '09:00')
+        start_datetime_str = data.get('start_datetime')
         day = data.get('day')
         
         if not username:
             return jsonify({'error': 'Username is required'}), 400
         
+        if not start_datetime_str:
+            return jsonify({'error': 'Start date/time is required'}), 400
+        
         keywords = [k.strip() for k in keywords_input.split(',')] if keywords_input else None
+        
+        # Parse start datetime (comes as YYYY-MM-DDTHH:MM from datetime-local input)
+        try:
+            start_datetime = datetime.fromisoformat(start_datetime_str)
+        except ValueError:
+            return jsonify({'error': 'Invalid date/time format'}), 400
+        
+        # Validate start datetime is in the future
+        if start_datetime <= datetime.utcnow():
+            return jsonify({'error': 'Start date/time must be in the future'}), 400
         
         # Save to database
         db = get_db_session()
@@ -222,7 +235,8 @@ def add_schedule():
                 username=username,
                 keywords=keywords,
                 frequency=frequency,
-                time=time_str,
+                start_datetime=start_datetime,
+                next_run=start_datetime,  # First run is the start time
                 day=day,
                 enabled=True
             )
