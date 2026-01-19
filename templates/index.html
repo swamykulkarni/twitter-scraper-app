@@ -14,7 +14,8 @@
         </header>
 
         <div class="tabs">
-            <button class="tab-btn active" data-tab="scrape">Quick Scrape</button>
+            <button class="tab-btn active" data-tab="scrape">Twitter Scraping</button>
+            <button class="tab-btn" data-tab="reddit">Reddit Scraping</button>
             <button class="tab-btn" data-tab="schedule">Scheduled Scraping</button>
             <button class="tab-btn" data-tab="history">Report History</button>
         </div>
@@ -139,6 +140,90 @@
                 <div class="card error">
                     <h2>⚠️ Error</h2>
                     <p id="errorMessage"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reddit Scraping Tab -->
+        <div id="reddit-tab" class="tab-content">
+            <div class="card">
+                <h2>🔍 Reddit Scraping</h2>
+                <form id="redditForm">
+                    <div class="form-group">
+                        <label for="subreddit">Subreddit Name</label>
+                        <input 
+                            type="text" 
+                            id="subreddit" 
+                            name="subreddit" 
+                            placeholder="e.g., startups, SaaS, entrepreneur (without r/)"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="reddit-keywords">Keywords (optional)</label>
+                        <input 
+                            type="text" 
+                            id="reddit-keywords" 
+                            name="keywords" 
+                            placeholder="e.g., AI, B2B, funding (comma-separated)"
+                        >
+                        <small>Leave empty to get all recent posts</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="reddit-min-keyword-mentions">Minimum Keyword Mentions</label>
+                        <input 
+                            type="number" 
+                            id="reddit-min-keyword-mentions" 
+                            placeholder="e.g., 5 (default: 1)"
+                            min="1"
+                            value="1"
+                        >
+                        <small>Only show keywords mentioned at least this many times</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="time-filter">Time Filter</label>
+                        <select id="time-filter">
+                            <option value="hour">Past Hour</option>
+                            <option value="day">Past 24 Hours</option>
+                            <option value="week" selected>Past Week</option>
+                            <option value="month">Past Month</option>
+                            <option value="year">Past Year</option>
+                            <option value="all">All Time</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" id="redditSubmitBtn" class="btn-primary">
+                        <span id="redditBtnText">Generate Report</span>
+                        <span id="redditBtnLoader" class="loader" style="display: none;"></span>
+                    </button>
+                </form>
+            </div>
+
+            <div id="reddit-results" class="results" style="display: none;">
+                <div class="card success">
+                    <h2>✓ Report Generated!</h2>
+                    <p id="redditResultMessage"></p>
+                    <div class="action-buttons">
+                        <button id="viewRedditReportBtn" class="btn-action">
+                            👁️ View Report
+                        </button>
+                        <a id="redditDownloadTxt" class="btn-download" download>
+                            📄 Download Report (.txt)
+                        </a>
+                        <a id="redditDownloadJson" class="btn-download" download>
+                            📊 Download Raw Data (.json)
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div id="reddit-error" class="results" style="display: none;">
+                <div class="card error">
+                    <h2>⚠️ Error</h2>
+                    <p id="redditErrorMessage"></p>
                 </div>
             </div>
         </div>

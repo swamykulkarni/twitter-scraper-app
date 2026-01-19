@@ -82,19 +82,21 @@ class Report(Base):
     __tablename__ = 'reports'
     
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, nullable=False, index=True)
+    platform = Column(String, default='twitter', index=True)  # 'twitter' or 'reddit'
+    username = Column(String, nullable=False, index=True)  # Twitter handle or subreddit name
     keywords = Column(JSON)
-    tweet_count = Column(Integer)
+    tweet_count = Column(Integer)  # or post_count for Reddit
     account_type = Column(String)
     lead_score = Column(Integer)
     report_content = Column(Text)  # Full text report
-    tweets_data = Column(JSON)  # Raw tweet data as JSON
+    tweets_data = Column(JSON)  # Raw tweet/post data as JSON
     filters = Column(JSON)  # Filters used
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     
     def to_dict(self):
         return {
             'id': self.id,
+            'platform': self.platform,
             'username': self.username,
             'keywords': self.keywords,
             'tweet_count': self.tweet_count,

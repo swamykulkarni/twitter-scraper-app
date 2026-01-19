@@ -476,3 +476,83 @@ function updateTimeDisplay() {
 // Update time every second
 setInterval(updateTimeDisplay, 1000);
 updateTimeDisplay(); // Initial call
+
+
+// Reddit Form Handler
+document.getElementById('redditForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const subreddit = document.getElementById('subreddit').value.trim();
+    const keywords = document.getElementById('reddit-keywords').value.trim();
+    const timeFilter = document.getElementById('time-filter').value;
+    const minKeywordMentions = document.getElementById('reddit-min-keyword-mentions').value;
+    
+    const submitBtn = document.getElementById('redditSubmitBtn');
+    const btnText = document.getElementById('redditBtnText');
+    const btnLoader = document.getElementById('redditBtnLoader');
+    const resultsDiv = document.getElementById('reddit-results');
+    const errorDiv = document.getElementById('reddit-error');
+    
+    // Hide previous results
+    resultsDiv.style.display = 'none';
+    errorDiv.style.display = 'none';
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    btnText.textContent = 'Analyzing...';
+    btnLoader.style.display = 'block';
+    
+    try {
+        const response = await fetch('/scrape-reddit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+                subreddit, 
+                keywords,
+                time_filter: timeFilter,
+                min_keyword_mentions: minKeywordMentions ? parseInt(minKeywordMentions) : 1
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            // Store report content
+            currentReportContent = data.report_content;
+            
+            // Show success
+            let message = `Found ${data.post_count} posts from r/${subreddit}`;
+            
+            document.getElementById('redditResultMessage').textContent = message;
+            document.getElementById('redditDownloadTxt').href = `/download/${data.report_file}`;
+            document.getElementById('redditDownloadJson').href = `/download/${data.json_file}`;
+            
+            resultsDiv.style.display = 'block';
+        } else {
+            // Show error
+            document.getElementById('redditErrorMessage').textContent = data.error;
+            errorDiv.style.display = 'block';
+        }
+    } catch (error) {
+        document.getElementById('redditErrorMessage').textContent = 
+            'Network error. Please check your connection and try again.';
+        errorDiv.style.display = 'block';
+    } finally {
+        // Reset button
+        submitBtn.disabled = false;
+        btnText.textContent = 'Generate Report';
+        btnLoader.style.display = 'none';
+    }
+});
+
+// View Reddit Report Button
+document.addEventListener('click', (e) => {
+    if (e.target.id === 'viewRedditReportBtn' || e.target.closest('#viewRedditReportBtn')) {
+        if (currentReportContent) {
+            document.getElementById('reportContent').textContent = currentReportContent;
+            document.getElementById('reportViewer').style.display = 'flex';
+        }
+    }
+});

@@ -3,6 +3,7 @@ import os
 import json
 from datetime import datetime
 from twitter_scraper import TwitterScraper
+from reddit_scraper import RedditScraper
 from scheduler import ScheduledScraper
 from database import init_db, get_db_session, Report, Schedule as DBSchedule, HistoricalTweet, engine
 
@@ -104,6 +105,7 @@ def scrape():
         db = get_db_session()
         try:
             db_report = Report(
+                platform='twitter',
                 username=username,
                 keywords=keywords,
                 tweet_count=len(tweets_data['data']),
@@ -129,6 +131,67 @@ def scrape():
             'tweets_data': tweets_data['data'],
             'account_type': account_analysis.get('type'),
             'lead_score': account_analysis.get('score')
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/scrape-reddit', methods=['POST'])
+def scrape_reddit():
+    try:
+        data = request.json
+        subreddit = data.get('subreddit', '').strip()
+        keywords_input = data.get('keywords', '').strip()
+        time_filter = data.get('time_filter', 'week')
+        min_keyword_mentions = data.get('min_keyword_mentions', 1)
+        
+        if not subreddit:
+            return jsonify({'error': 'Subreddit is required'}), 400
+        
+        keywords = [k.strip() for k in keywords_input.split(',')] if keywords_input else None
+        
+        scraper = RedditScraper()
+        posts_data = scraper.search_subreddit(subreddit, keywords=keywords, max_results=100, time_filter=time_filter)
+        
+        if not posts_data or 'data' not in posts_data:
+            return jsonify({'error': 'No posts found or API error occurred'}), 404
+        
+        report_file = scraper.generate_report(posts_data, subreddit, keywords, min_keyword_mentions)
+        
+        json_file = report_file.replace('.txt', '.json')
+        with open(json_file, 'w', encoding='utf-8') as f:
+            json.dump(posts_data, f, indent=2)
+        
+        # Read report content for display
+        with open(report_file, 'r', encoding='utf-8') as f:
+            report_content = f.read()
+        
+        # Save to database
+        db = get_db_session()
+        try:
+            db_report = Report(
+                platform='reddit',
+                username=subreddit,
+                keywords=keywords,
+                tweet_count=len(posts_data['data']),
+                report_content=report_content,
+                tweets_data=posts_data,
+                filters={'time_filter': time_filter}
+            )
+            db.add(db_report)
+            db.commit()
+            report_id = db_report.id
+        finally:
+            db.close()
+        
+        return jsonify({
+            'success': True,
+            'report_id': report_id,
+            'report_file': report_file,
+            'json_file': json_file,
+            'post_count': len(posts_data['data']),
+            'report_content': report_content,
+            'posts_data': posts_data['data']
         })
     
     except Exception as e:
