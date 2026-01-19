@@ -34,6 +34,7 @@ def health():
             
             # Count records
             schedules_count = db.query(DBSchedule).count()
+            enabled_schedules_count = db.query(DBSchedule).filter(DBSchedule.enabled == True).count()
             reports_count = db.query(Report).count()
             tweets_count = db.query(HistoricalTweet).count()
             
@@ -41,6 +42,7 @@ def health():
             db_status = f'error: {str(e)}'
             db_type = 'unknown'
             schedules_count = 0
+            enabled_schedules_count = 0
             reports_count = 0
             tweets_count = 0
         finally:
@@ -55,7 +57,8 @@ def health():
                 'connection_string': str(engine.url)[:50] + '...'
             },
             'data': {
-                'schedules': schedules_count,
+                'schedules_total': schedules_count,
+                'schedules_enabled': enabled_schedules_count,
                 'reports': reports_count,
                 'historical_tweets': tweets_count,
                 'total_records': schedules_count + reports_count + tweets_count
@@ -66,6 +69,70 @@ def health():
             'status': 'unhealthy',
             'error': str(e)
         }), 500
+
+@app.route('/debug/schedules')
+def debug_schedules():
+    """Debug endpoint to see all schedules in database"""
+    try:
+        db = get_db_session()
+        try:
+            all_schedules = db.query(DBSchedule).all()
+            schedules_data = []
+            for s in all_schedules:
+                schedules_data.append({
+                    'id': s.id,
+                    'username': s.username,
+                    'keywords': s.keywords,
+                    'frequency': s.frequency,
+                    'enabled': s.enabled,
+                    'start_datetime': s.start_datetime.isoformat() if s.start_datetime else None,
+                    'next_run': s.next_run.isoformat() if s.next_run else None,
+                    'last_run': s.last_run.isoformat() if s.last_run else None,
+                    'created_at': s.created_at.isoformat() if s.created_at else None,
+                    'has_start_datetime': s.start_datetime is not None
+                })
+            
+            return jsonify({
+                'total_schedules': len(all_schedules),
+                'schedules': schedules_data
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/debug/cleanup-legacy-schedules', methods=['POST'])
+def cleanup_legacy_schedules():
+    """Disable schedules without start_datetime (legacy schedules)"""
+    try:
+        db = get_db_session()
+        try:
+            # Find all enabled schedules without start_datetime
+            legacy_schedules = db.query(DBSchedule).filter(
+                DBSchedule.enabled == True,
+                DBSchedule.start_datetime == None
+            ).all()
+            
+            disabled_count = 0
+            disabled_ids = []
+            
+            for schedule in legacy_schedules:
+                schedule.enabled = False
+                disabled_ids.append(schedule.id)
+                disabled_count += 1
+                print(f"[CLEANUP] Disabled legacy schedule: ID={schedule.id}, username={schedule.username}")
+            
+            db.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Disabled {disabled_count} legacy schedule(s)',
+                'disabled_schedule_ids': disabled_ids
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/scrape', methods=['POST'])
 def scrape():
@@ -256,8 +323,21 @@ def get_schedules():
     try:
         db = get_db_session()
         try:
+            # Get all enabled schedules
             schedules = db.query(DBSchedule).filter(DBSchedule.enabled == True).all()
-            return jsonify({'schedules': [s.to_dict() for s in schedules]})
+            
+            # Filter out schedules without start_datetime (legacy schedules)
+            valid_schedules = []
+            for s in schedules:
+                schedule_dict = s.to_dict()
+                # Only include schedules with start_datetime
+                if schedule_dict.get('start_datetime'):
+                    valid_schedules.append(schedule_dict)
+                else:
+                    # Log legacy schedule found
+                    print(f"[WARNING] Found legacy schedule without start_datetime: ID={s.id}, username={s.username}")
+            
+            return jsonify({'schedules': valid_schedules})
         finally:
             db.close()
     except Exception as e:

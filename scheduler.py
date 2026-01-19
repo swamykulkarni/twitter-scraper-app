@@ -19,8 +19,17 @@ class ScheduledScraper:
             db = get_db_session()
             try:
                 db_schedules = db.query(DBSchedule).filter(DBSchedule.enabled == True).all()
-                self.schedules = [s.to_dict() for s in db_schedules]
-                print(f"Loaded {len(self.schedules)} schedules from database")
+                
+                # Filter out legacy schedules without start_datetime
+                valid_schedules = []
+                for s in db_schedules:
+                    if s.start_datetime:
+                        valid_schedules.append(s.to_dict())
+                    else:
+                        print(f"[SCHEDULER] Skipping legacy schedule without start_datetime: ID={s.id}, username={s.username}")
+                
+                self.schedules = valid_schedules
+                print(f"Loaded {len(self.schedules)} valid schedules from database")
             finally:
                 db.close()
         except Exception as e:
