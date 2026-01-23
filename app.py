@@ -195,6 +195,59 @@ def fix_platform_field():
             'traceback': traceback.format_exc()
         }), 500
 
+@app.route('/debug/raw-reports')
+def raw_reports():
+    """Show raw database records from reports table"""
+    try:
+        db = get_db_session()
+        try:
+            # Get raw SQL results
+            result = db.execute("""
+                SELECT 
+                    id, 
+                    platform, 
+                    username, 
+                    keywords, 
+                    tweet_count, 
+                    account_type, 
+                    lead_score, 
+                    created_at,
+                    LENGTH(report_content) as content_length,
+                    CASE WHEN tweets_data IS NULL THEN 'NULL' ELSE 'EXISTS' END as tweets_data_status
+                FROM reports 
+                ORDER BY created_at DESC 
+                LIMIT 50
+            """)
+            
+            rows = []
+            for row in result:
+                rows.append({
+                    'id': row[0],
+                    'platform': row[1],
+                    'username': row[2],
+                    'keywords': row[3],
+                    'tweet_count': row[4],
+                    'account_type': row[5],
+                    'lead_score': row[6],
+                    'created_at': str(row[7]),
+                    'content_length': row[8],
+                    'tweets_data_status': row[9]
+                })
+            
+            return jsonify({
+                'total_rows': len(rows),
+                'database_type': 'PostgreSQL' if 'postgresql' in str(engine.url) else 'SQLite',
+                'reports': rows
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
 @app.route('/scrape', methods=['POST'])
 def scrape():
     try:
