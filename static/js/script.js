@@ -383,16 +383,23 @@ async function deleteSchedule(scheduleId) {
 
 // Load reports history
 async function loadReports() {
+    console.log('[REPORTS] Loading reports...');
     try {
         const response = await fetch('/reports');
         const data = await response.json();
         
+        console.log('[REPORTS] Response:', data);
+        console.log('[REPORTS] Total reports:', data.total);
+        
         const container = document.getElementById('reports-container');
         
         if (!data.reports || data.reports.length === 0) {
+            console.log('[REPORTS] No reports found');
             container.innerHTML = '<p style="color: #666;">No reports yet. Generate one in the Twitter or Reddit Scraping tabs!</p>';
             return;
         }
+        
+        console.log('[REPORTS] Rendering', data.reports.length, 'reports');
         
         container.innerHTML = data.reports.map(report => {
             const platform = report.platform || 'twitter';
@@ -420,15 +427,20 @@ async function loadReports() {
             `;
         }).join('');
         
+        console.log('[REPORTS] HTML rendered, adding event listeners');
+        
         // Add event listeners to view buttons
         document.querySelectorAll('.btn-view').forEach(btn => {
             btn.addEventListener('click', async function() {
                 const reportId = parseInt(this.getAttribute('data-report-id'));
+                console.log('[REPORTS] Viewing report ID:', reportId);
                 await viewStoredReport(reportId);
             });
         });
+        
+        console.log('[REPORTS] Load complete');
     } catch (error) {
-        console.error('Error loading reports:', error);
+        console.error('[REPORTS] Error loading reports:', error);
         document.getElementById('reports-container').innerHTML = 
             `<p style="color: #f44336;">Error loading reports: ${error.message}</p>`;
     }
