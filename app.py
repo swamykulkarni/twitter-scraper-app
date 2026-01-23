@@ -200,6 +200,17 @@ def fix_platform_field():
 def raw_reports():
     """Show raw database records from reports table"""
     try:
+        # Try to connect directly to PostgreSQL if DATABASE_URL is set
+        import os
+        pg_url = os.getenv('DATABASE_URL') or os.getenv('DATABASE_PRIVATE_URL') or os.getenv('POSTGRES_URL')
+        
+        if not pg_url:
+            return jsonify({
+                'error': 'No DATABASE_URL found',
+                'message': 'PostgreSQL is not connected. Using SQLite which has no data.',
+                'current_db': str(engine.url)
+            }), 500
+        
         db = get_db_session()
         try:
             # Get raw SQL results
@@ -238,6 +249,8 @@ def raw_reports():
             return jsonify({
                 'total_rows': len(rows),
                 'database_type': 'PostgreSQL' if 'postgresql' in str(engine.url) else 'SQLite',
+                'database_url_set': bool(pg_url),
+                'connection_string': str(engine.url)[:60] + '...',
                 'reports': rows
             })
         finally:
@@ -246,7 +259,9 @@ def raw_reports():
         import traceback
         return jsonify({
             'error': str(e),
-            'traceback': traceback.format_exc()
+            'traceback': traceback.format_exc(),
+            'database_url_set': bool(os.getenv('DATABASE_URL')),
+            'current_db': str(engine.url)
         }), 500
 
 @app.route('/scrape', methods=['POST'])
