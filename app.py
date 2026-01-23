@@ -7,6 +7,7 @@ from reddit_scraper import RedditScraper
 from scheduler import ScheduledScraper
 from database import init_db, get_db_session, Report, Schedule as DBSchedule, HistoricalTweet, engine
 
+# Social Listening Platform - v2.5 (Similar Accounts Feature)
 app = Flask(__name__)
 
 # Initialize database
