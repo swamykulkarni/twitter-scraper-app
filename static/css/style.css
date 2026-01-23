@@ -679,3 +679,32 @@ input[type="number"]:focus {
     background-color: #e3f2fd;
     border-left: 4px solid #2196f3;
 }
+
+
+/* Pagination Styles */
+.page-number {
+    padding: 8px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 14px;
+}
+
+.page-number:hover {
+    border-color: #1da1f2;
+    background: #f0f8ff;
+}
+
+.page-number.active {
+    background: #1da1f2;
+    color: white;
+    border-color: #1da1f2;
+    font-weight: 600;
+}
+
+.page-number.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

@@ -233,12 +233,25 @@
                     
                     <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <button id="select-all-accounts" class="btn-action">Select All</button>
+                            <button id="select-all-accounts" class="btn-action">Select All (Page)</button>
+                            <button id="select-all-visible" class="btn-action">Select All Visible</button>
                             <button id="deselect-all-accounts" class="btn-action">Deselect All</button>
                             <button id="bulk-scrape-btn" class="btn-primary" style="margin-left: 10px;">
                                 📊 Bulk Scrape Selected (<span id="selected-count">0</span>)
                             </button>
                         </div>
+                        <div>
+                            <label for="accounts-per-page" style="margin-right: 8px;">Show:</label>
+                            <select id="accounts-per-page" style="padding: 5px;">
+                                <option value="10" selected>10 per page</option>
+                                <option value="25">25 per page</option>
+                                <option value="50">50 per page</option>
+                                <option value="all">All</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <label for="sort-accounts" style="margin-right: 8px;">Sort by:</label>
                             <select id="sort-accounts" style="padding: 5px;">
@@ -254,9 +267,19 @@
                                 <option value="verified">Verified Only</option>
                             </select>
                         </div>
+                        <div id="accounts-range" style="color: #657786; font-size: 14px;"></div>
                     </div>
 
                     <div id="accounts-container"></div>
+
+                    <!-- Pagination Controls -->
+                    <div id="pagination-controls" style="display: flex; justify-content: center; align-items: center; margin-top: 20px; gap: 10px;">
+                        <button id="first-page" class="btn-action" disabled>« First</button>
+                        <button id="prev-page" class="btn-action" disabled>‹ Prev</button>
+                        <div id="page-numbers" style="display: flex; gap: 5px;"></div>
+                        <button id="next-page" class="btn-action">Next ›</button>
+                        <button id="last-page" class="btn-action">Last »</button>
+                    </div>
                 </div>
             </div>
 

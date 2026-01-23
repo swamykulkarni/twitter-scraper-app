@@ -584,6 +584,9 @@ document.addEventListener('click', (e) => {
 let discoveredAccounts = [];
 let selectedAccounts = new Set();
 let allAccounts = []; // Store all accounts for filtering/sorting
+let currentPage = 1;
+let accountsPerPage = 10;
+let filteredAccounts = []; // Currently filtered/sorted accounts
 
 document.getElementById('discoverForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -627,10 +630,13 @@ document.getElementById('discoverForm').addEventListener('submit', async (e) => 
         
         if (response.ok) {
             allAccounts = data.accounts;
+            filteredAccounts = data.accounts;
             discoveredAccounts = data.accounts;
             selectedAccounts.clear();
+            currentPage = 1;
             
             displayDiscoveredAccounts(data.accounts);
+            updatePagination();
             
             document.getElementById('accounts-count').textContent = 
                 `${data.total_accounts} account${data.total_accounts !== 1 ? 's' : ''} found`;
@@ -656,10 +662,28 @@ function displayDiscoveredAccounts(accounts) {
     
     if (accounts.length === 0) {
         container.innerHTML = '<p style="color: #666;">No accounts found. Try different keywords or adjust filters.</p>';
+        document.getElementById('pagination-controls').style.display = 'none';
         return;
     }
     
-    container.innerHTML = accounts.map(account => {
+    // Store filtered accounts for pagination
+    filteredAccounts = accounts;
+    
+    // Calculate pagination
+    const totalPages = Math.ceil(accounts.length / accountsPerPage);
+    const startIndex = (currentPage - 1) * accountsPerPage;
+    const endIndex = Math.min(startIndex + accountsPerPage, accounts.length);
+    const pageAccounts = accounts.slice(startIndex, endIndex);
+    
+    // Update range display
+    document.getElementById('accounts-range').textContent = 
+        `Showing ${startIndex + 1}-${endIndex} of ${accounts.length}`;
+    
+    // Show pagination controls if needed
+    document.getElementById('pagination-controls').style.display = 
+        accounts.length > accountsPerPage ? 'flex' : 'none';
+    
+    container.innerHTML = pageAccounts.map(account => {
         // Quality score color
         let scoreColor = '#4caf50'; // green
         if (account.quality_score < 40) scoreColor = '#f44336'; // red
@@ -716,6 +740,65 @@ function displayDiscoveredAccounts(accounts) {
             
             updateSelectedCount();
         });
+        
+        // Restore selection state if account was previously selected
+        const username = checkbox.getAttribute('data-username');
+        if (selectedAccounts.has(username)) {
+            checkbox.checked = true;
+            checkbox.closest('.account-card').classList.add('selected');
+        }
+    });
+}
+
+function updatePagination() {
+    const totalPages = Math.ceil(filteredAccounts.length / accountsPerPage);
+    const pageNumbersContainer = document.getElementById('page-numbers');
+    
+    // Update button states
+    document.getElementById('first-page').disabled = currentPage === 1;
+    document.getElementById('prev-page').disabled = currentPage === 1;
+    document.getElementById('next-page').disabled = currentPage === totalPages;
+    document.getElementById('last-page').disabled = currentPage === totalPages;
+    
+    // Generate page numbers (show max 7 pages)
+    let pageNumbers = [];
+    if (totalPages <= 7) {
+        pageNumbers = Array.from({length: totalPages}, (_, i) => i + 1);
+    } else {
+        if (currentPage <= 4) {
+            pageNumbers = [1, 2, 3, 4, 5, '...', totalPages];
+        } else if (currentPage >= totalPages - 3) {
+            pageNumbers = [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+        } else {
+            pageNumbers = [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
+        }
+    }
+    
+    pageNumbersContainer.innerHTML = pageNumbers.map(page => {
+        if (page === '...') {
+            return '<span style="padding: 8px; color: #657786;">...</span>';
+        }
+        const isActive = page === currentPage;
+        return `
+            <button class="page-number-btn ${isActive ? 'active' : ''}" 
+                    data-page="${page}"
+                    style="padding: 8px 12px; border: 1px solid #e1e8ed; background: ${isActive ? '#1da1f2' : 'white'}; 
+                           color: ${isActive ? 'white' : '#14171a'}; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                ${page}
+            </button>
+        `;
+    }).join('');
+    
+    // Add event listeners to page number buttons
+    document.querySelectorAll('.page-number-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const page = parseInt(this.getAttribute('data-page'));
+            currentPage = page;
+            displayDiscoveredAccounts(filteredAccounts);
+            updatePagination();
+            // Scroll to top of accounts
+            document.getElementById('accounts-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
     });
 }
 
@@ -735,6 +818,7 @@ function updateSelectedCount() {
 
 // Select/Deselect All
 document.getElementById('select-all-accounts').addEventListener('click', () => {
+    // Select all visible accounts on current page
     document.querySelectorAll('.account-checkbox').forEach(checkbox => {
         checkbox.checked = true;
         const username = checkbox.getAttribute('data-username');
@@ -745,13 +829,65 @@ document.getElementById('select-all-accounts').addEventListener('click', () => {
 });
 
 document.getElementById('deselect-all-accounts').addEventListener('click', () => {
+    // Deselect all accounts (not just current page)
+    selectedAccounts.clear();
     document.querySelectorAll('.account-checkbox').forEach(checkbox => {
         checkbox.checked = false;
-        const username = checkbox.getAttribute('data-username');
-        selectedAccounts.delete(username);
         checkbox.closest('.account-card').classList.remove('selected');
     });
     updateSelectedCount();
+});
+
+// Pagination button event listeners
+document.getElementById('first-page').addEventListener('click', () => {
+    currentPage = 1;
+    displayDiscoveredAccounts(filteredAccounts);
+    updatePagination();
+    document.getElementById('accounts-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+document.getElementById('prev-page').addEventListener('click', () => {
+    if (currentPage > 1) {
+        currentPage--;
+        displayDiscoveredAccounts(filteredAccounts);
+        updatePagination();
+        document.getElementById('accounts-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+});
+
+document.getElementById('next-page').addEventListener('click', () => {
+    const totalPages = Math.ceil(filteredAccounts.length / accountsPerPage);
+    if (currentPage < totalPages) {
+        currentPage++;
+        displayDiscoveredAccounts(filteredAccounts);
+        updatePagination();
+        document.getElementById('accounts-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+});
+
+document.getElementById('last-page').addEventListener('click', () => {
+    const totalPages = Math.ceil(filteredAccounts.length / accountsPerPage);
+    currentPage = totalPages;
+    displayDiscoveredAccounts(filteredAccounts);
+    updatePagination();
+    document.getElementById('accounts-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+// Accounts per page selector
+document.getElementById('accounts-per-page').addEventListener('change', (e) => {
+    const value = e.target.value;
+    
+    if (value === 'all') {
+        accountsPerPage = filteredAccounts.length || 10; // Show all or default to 10
+    } else {
+        accountsPerPage = parseInt(value);
+    }
+    
+    // Reset to page 1
+    currentPage = 1;
+    
+    displayDiscoveredAccounts(filteredAccounts);
+    updatePagination();
 });
 
 // Bulk Scrape
@@ -861,7 +997,12 @@ document.getElementById('sort-accounts').addEventListener('change', (e) => {
     const filterType = document.getElementById('filter-type').value;
     sorted = applyTypeFilter(sorted, filterType);
     
+    // Reset to page 1
+    currentPage = 1;
+    filteredAccounts = sorted;
+    
     displayDiscoveredAccounts(sorted);
+    updatePagination();
 });
 
 // Filter by account type
@@ -883,7 +1024,13 @@ document.getElementById('filter-type').addEventListener('change', (e) => {
     // Then filter
     filtered = applyTypeFilter(filtered, filterType);
     
+    // Reset to page 1
+    currentPage = 1;
+    filteredAccounts = filtered;
+    
     displayDiscoveredAccounts(filtered);
+    updatePagination();
+    
     document.getElementById('accounts-count').textContent = 
         `${filtered.length} account${filtered.length !== 1 ? 's' : ''} shown`;
 });
