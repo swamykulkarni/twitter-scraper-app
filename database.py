@@ -1,5 +1,6 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, JSON, Float, ARRAY, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, JSON, Float, ARRAY, ForeignKey, Index, func
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -186,6 +187,14 @@ class DeepHistory(Base):
     scrape_type = Column(String)  # 'quick', 'scheduled', 'bulk', 'discovery'
     filters_used = Column(JSON)   # Filters applied during scrape
     
+    # Full-Text Search (PostgreSQL only)
+    search_vector = Column(TSVECTOR)  # For full-text search
+    
+    # Create GIN index for full-text search (PostgreSQL only)
+    __table_args__ = (
+        Index('idx_deep_history_search_vector', 'search_vector', postgresql_using='gin'),
+    )
+    
     def to_dict(self):
         return {
             'id': self.id,
@@ -292,8 +301,22 @@ def save_to_deep_history(
         
         # Extract account snapshot
         account_snapshot = None
+        bio_text = ''
         if raw_json and 'account_info' in raw_json:
             account_snapshot = raw_json['account_info']
+            bio_text = account_snapshot.get('description', '') if account_snapshot else ''
+        
+        # Build searchable text for full-text search
+        # Combine: username, bio, keywords, hashtags, raw_text
+        searchable_parts = [
+            username,
+            bio_text,
+            ' '.join(raw_json.get('keywords', [])) if raw_json else '',
+            ' '.join(hashtags),
+            ' '.join(mentions),
+            raw_text[:5000] if raw_text else ''  # Limit to first 5000 chars
+        ]
+        searchable_text = ' '.join(filter(None, searchable_parts))
         
         # Create deep_history record
         deep_record = DeepHistory(
@@ -320,6 +343,23 @@ def save_to_deep_history(
         )
         
         session.add(deep_record)
+        session.flush()  # Get the ID before updating search_vector
+        
+        # Update search_vector using PostgreSQL's to_tsvector
+        # Only do this for PostgreSQL (not SQLite)
+        if 'postgresql' in str(engine.url):
+            try:
+                session.execute(
+                    func.to_tsvector('english', searchable_text).label('search_vector')
+                )
+                session.execute(
+                    f"UPDATE deep_history SET search_vector = to_tsvector('english', :text) WHERE id = :id",
+                    {'text': searchable_text, 'id': deep_record.id}
+                )
+            except Exception as search_error:
+                print(f"[DEEP_HISTORY] Warning: Could not update search_vector: {search_error}")
+                # Don't fail the whole operation if search vector fails
+        
         session.commit()
         session.refresh(deep_record)
         
@@ -331,6 +371,58 @@ def save_to_deep_history(
         session.rollback()
         print(f"[DEEP_HISTORY] Error saving to deep_history: {e}")
         raise
+    finally:
+        session.close()
+
+
+def search_deep_history(query_text, platform=None, limit=50):
+    """
+    Full-text search across deep_history
+    
+    Args:
+        query_text: Search query (e.g., "AI machine learning")
+        platform: Optional filter by platform ('twitter' or 'reddit')
+        limit: Maximum results to return
+    
+    Returns:
+        List of DeepHistory records matching the query
+    """
+    session = get_db_session()
+    
+    try:
+        # Check if using PostgreSQL
+        if 'postgresql' not in str(engine.url):
+            print("[DEEP_HISTORY] Full-text search only available with PostgreSQL")
+            # Fallback to simple text search for SQLite
+            query = session.query(DeepHistory).filter(
+                DeepHistory.raw_text.ilike(f'%{query_text}%')
+            )
+        else:
+            # Use PostgreSQL full-text search
+            # Convert query to tsquery format
+            tsquery = func.plainto_tsquery('english', query_text)
+            
+            query = session.query(DeepHistory).filter(
+                DeepHistory.search_vector.op('@@')(tsquery)
+            )
+        
+        # Add platform filter if specified
+        if platform:
+            query = query.filter(DeepHistory.platform == platform)
+        
+        # Order by scraped_at (most recent first)
+        query = query.order_by(DeepHistory.scraped_at.desc())
+        
+        # Limit results
+        results = query.limit(limit).all()
+        
+        print(f"[DEEP_HISTORY] Found {len(results)} results for query: {query_text}")
+        
+        return results
+        
+    except Exception as e:
+        print(f"[DEEP_HISTORY] Error searching deep_history: {e}")
+        return []
     finally:
         session.close()
 

@@ -5,7 +5,7 @@ from datetime import datetime
 from twitter_scraper import TwitterScraper
 from reddit_scraper import RedditScraper
 from scheduler import ScheduledScraper
-from database import init_db, get_db_session, Report, Schedule as DBSchedule, HistoricalTweet, engine, save_to_deep_history
+from database import init_db, get_db_session, Report, Schedule as DBSchedule, HistoricalTweet, engine, save_to_deep_history, search_deep_history
 
 # Social Listening Platform - v2.5 (Similar Accounts Feature)
 app = Flask(__name__)
@@ -649,6 +649,32 @@ def get_report(report_id):
             })
         finally:
             db.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/search-history', methods=['POST'])
+def search_history():
+    """Full-text search across deep_history"""
+    try:
+        data = request.json
+        query_text = data.get('query', '').strip()
+        platform = data.get('platform')  # Optional: 'twitter' or 'reddit'
+        limit = data.get('limit', 50)
+        
+        if not query_text:
+            return jsonify({'error': 'Search query is required'}), 400
+        
+        results = search_deep_history(query_text, platform=platform, limit=limit)
+        
+        results_list = [r.to_dict() for r in results]
+        
+        return jsonify({
+            'success': True,
+            'results': results_list,
+            'total': len(results_list),
+            'query': query_text
+        })
+    
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
