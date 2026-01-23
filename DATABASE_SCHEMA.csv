@@ -1,0 +1,54 @@
+table_name,column_name,data_type,nullable,default_value,primary_key,foreign_key,indexed,description,example_value,cardinality,data_classification
+schedules,id,INTEGER,NOT NULL,AUTO_INCREMENT,YES,,YES,Primary key - auto-incrementing schedule ID,1,UNIQUE,SYSTEM
+schedules,username,VARCHAR,NOT NULL,,NO,,NO,Twitter username to scrape,elonmusk,HIGH,PII
+schedules,keywords,JSON,NULL,,NO,,NO,Array of keywords to filter tweets,"[""AI"", ""Tesla""]",MEDIUM,CONTENT
+schedules,frequency,VARCHAR,NOT NULL,,NO,,NO,Schedule frequency: once/hourly/daily/weekly,daily,LOW,CONFIG
+schedules,start_datetime,DATETIME,NOT NULL,,NO,,NO,When to start the schedule (UTC),2026-01-23 10:00:00,HIGH,TEMPORAL
+schedules,day,VARCHAR,NULL,,NO,,NO,Day of week for weekly schedules,monday,LOW,CONFIG
+schedules,enabled,BOOLEAN,NULL,TRUE,NO,,NO,Whether schedule is active,TRUE,LOW,CONFIG
+schedules,last_run,DATETIME,NULL,,NO,,NO,Timestamp of last execution,2026-01-23 09:00:00,HIGH,TEMPORAL
+schedules,next_run,DATETIME,NULL,,NO,,NO,Calculated next run time,2026-01-24 09:00:00,HIGH,TEMPORAL
+schedules,created_at,DATETIME,NULL,NOW(),NO,,NO,When schedule was created,2026-01-20 15:30:00,HIGH,TEMPORAL
+reports,id,INTEGER,NOT NULL,AUTO_INCREMENT,YES,,YES,Primary key - auto-incrementing report ID,1,UNIQUE,SYSTEM
+reports,platform,VARCHAR,NULL,twitter,NO,,YES,Platform: twitter or reddit,twitter,LOW,CATEGORY
+reports,username,VARCHAR,NOT NULL,,NO,,YES,Account username or subreddit name,elonmusk,HIGH,PII
+reports,keywords,JSON,NULL,,NO,,NO,Keywords used in search,"[""AI"", ""SpaceX""]",MEDIUM,CONTENT
+reports,tweet_count,INTEGER,NULL,,NO,,NO,Number of tweets/posts found,50,MEDIUM,METRIC
+reports,account_type,VARCHAR,NULL,,NO,,NO,Business/Professional/Personal/Bot,Business,LOW,CATEGORY
+reports,lead_score,INTEGER,NULL,,NO,,NO,Quality score 0-7,6,MEDIUM,METRIC
+reports,report_content,TEXT,NULL,,NO,,NO,Full text report content,See full report...,HIGH,CONTENT
+reports,tweets_data,JSON,NULL,,NO,,NO,Raw tweet/post data as JSON,{...},HIGH,CONTENT
+reports,filters,JSON,NULL,,NO,,NO,Filters applied during scrape,"{""min_likes"": 10}",MEDIUM,CONFIG
+reports,created_at,DATETIME,NULL,NOW(),NO,,YES,When report was generated,2026-01-23 10:30:00,HIGH,TEMPORAL
+historical_tweets,id,INTEGER,NOT NULL,AUTO_INCREMENT,YES,,YES,Primary key - auto-incrementing tweet ID,1,UNIQUE,SYSTEM
+historical_tweets,tweet_id,VARCHAR,NOT NULL,,NO,,YES,Twitter's unique tweet ID,1234567890123456789,UNIQUE,SYSTEM
+historical_tweets,username,VARCHAR,NOT NULL,,NO,,YES,Twitter username who posted,elonmusk,HIGH,PII
+historical_tweets,text,TEXT,NULL,,NO,,NO,Tweet text content,This is a tweet about AI,HIGH,CONTENT
+historical_tweets,created_at,DATETIME,NULL,,NO,,YES,When tweet was posted,2026-01-23 08:00:00,HIGH,TEMPORAL
+historical_tweets,tweet_data,JSON,NULL,,NO,,NO,Full tweet metadata,{...},HIGH,CONTENT
+historical_tweets,collected_at,DATETIME,NULL,NOW(),NO,,NO,When we collected this tweet,2026-01-23 10:30:00,HIGH,TEMPORAL
+deep_history,id,INTEGER,NOT NULL,AUTO_INCREMENT,YES,,YES,Primary key - auto-incrementing history ID,1,UNIQUE,SYSTEM
+deep_history,report_id,INTEGER,NULL,,NO,reports.id,YES,Foreign key to reports table,123,HIGH,REFERENCE
+deep_history,username,VARCHAR,NOT NULL,,NO,,YES,Account username,elonmusk,HIGH,PII
+deep_history,platform,VARCHAR,NOT NULL,,NO,,YES,Platform: twitter or reddit,twitter,LOW,CATEGORY
+deep_history,scraped_at,DATETIME,NULL,NOW(),NO,,YES,When data was scraped,2026-01-23 10:30:00,HIGH,TEMPORAL
+deep_history,raw_json,JSON,NULL,,NO,,NO,Full structured data in JSON format,{...},HIGH,CONTENT
+deep_history,raw_text,TEXT,NULL,,NO,,NO,Plain text report,Full report text...,HIGH,CONTENT
+deep_history,raw_csv,TEXT,NULL,,NO,,NO,CSV format (future use),username;followers;...,HIGH,CONTENT
+deep_history,tweet_ids,JSON,NULL,,NO,,NO,Array of tweet/post IDs,"[""123"", ""456""]",HIGH,REFERENCE
+deep_history,keywords,JSON,NULL,,NO,,NO,Keywords used in search,"[""AI"", ""ML""]",MEDIUM,CONTENT
+deep_history,hashtags,JSON,NULL,,NO,,NO,Extracted hashtags from tweets,"[""AI"", ""Tech""]",MEDIUM,CONTENT
+deep_history,mentions,JSON,NULL,,NO,,NO,Extracted @mentions,"[""user1"", ""user2""]",MEDIUM,CONTENT
+deep_history,urls,JSON,NULL,,NO,,NO,Extracted URLs,"[""https://...""]",MEDIUM,CONTENT
+deep_history,account_snapshot,JSON,NULL,,NO,,NO,Account info at time of scrape,"{""followers"": 1000}",HIGH,CONTENT
+deep_history,total_tweets,INTEGER,NULL,0,NO,,NO,Number of tweets in this scrape,50,MEDIUM,METRIC
+deep_history,total_engagement,INTEGER,NULL,0,NO,,NO,Sum of likes + retweets + replies,15000,MEDIUM,METRIC
+deep_history,avg_sentiment,FLOAT,NULL,,NO,,NO,Average sentiment score -1 to 1,0.75,MEDIUM,METRIC
+deep_history,lead_score,INTEGER,NULL,,NO,,NO,Quality score 0-7,6,MEDIUM,METRIC
+deep_history,account_type,VARCHAR,NULL,,NO,,NO,Business/Professional/Personal/Bot,Business,LOW,CATEGORY
+deep_history,topics,JSON,NULL,,NO,,NO,LLM-extracted topics (future),"[""AI"", ""Robotics""]",MEDIUM,CONTENT
+deep_history,ai_analysis,JSON,NULL,,NO,,NO,LLM analysis results (future),{...},HIGH,CONTENT
+deep_history,ai_summary,TEXT,NULL,,NO,,NO,Natural language summary (future),This account focuses on...,HIGH,CONTENT
+deep_history,scrape_type,VARCHAR,NULL,,NO,,NO,quick/scheduled/bulk/discovery,quick,LOW,CATEGORY
+deep_history,filters_used,JSON,NULL,,NO,,NO,Filters applied during scrape,"{""min_followers"": 1000}",MEDIUM,CONFIG
+deep_history,search_vector,TSVECTOR,NULL,,NO,,YES (GIN),Full-text search vector,N/A,HIGH,SYSTEM
