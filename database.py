@@ -7,6 +7,22 @@ from datetime import datetime
 # Get database URL from environment variable (Railway provides this automatically)
 # Try multiple possible environment variable names
 print(f"[DATABASE] Checking for database connection...")
+
+# Option 1: Direct DATABASE_URL
+DATABASE_URL = os.getenv('DATABASE_URL') or os.getenv('DATABASE_PRIVATE_URL') or os.getenv('POSTGRES_URL')
+
+# Option 2: Build from individual components (Railway's preferred method)
+if not DATABASE_URL:
+    pghost = os.getenv('PGHOST')
+    pgport = os.getenv('PGPORT', '5432')
+    pguser = os.getenv('PGUSER')
+    pgpassword = os.getenv('PGPASSWORD')
+    pgdatabase = os.getenv('PGDATABASE')
+    
+    if all([pghost, pguser, pgpassword, pgdatabase]):
+        DATABASE_URL = f"postgresql://{pguser}:{pgpassword}@{pghost}:{pgport}/{pgdatabase}"
+        print(f"[DATABASE] Built DATABASE_URL from individual components")
+
 print(f"[DATABASE] Environment variables containing 'DATABASE' or 'POSTGRES':")
 for key in os.environ.keys():
     if 'DATABASE' in key.upper() or 'POSTGRES' in key.upper() or 'PG' in key.upper():
@@ -18,13 +34,7 @@ print(f"[DATABASE] DATABASE_URL exists: {bool(os.getenv('DATABASE_URL'))}")
 print(f"[DATABASE] DATABASE_PRIVATE_URL exists: {bool(os.getenv('DATABASE_PRIVATE_URL'))}")
 print(f"[DATABASE] POSTGRES_URL exists: {bool(os.getenv('POSTGRES_URL'))}")
 print(f"[DATABASE] DATABASE_PUBLIC_URL exists: {bool(os.getenv('DATABASE_PUBLIC_URL'))}")
-
-DATABASE_URL = (
-    os.getenv('DATABASE_URL') or 
-    os.getenv('DATABASE_PRIVATE_URL') or 
-    os.getenv('POSTGRES_URL') or
-    os.getenv('DATABASE_PUBLIC_URL')
-)
+print(f"[DATABASE] PGHOST exists: {bool(os.getenv('PGHOST'))}")
 
 # Handle Railway's postgres:// vs postgresql:// URL format
 if DATABASE_URL:
