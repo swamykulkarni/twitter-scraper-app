@@ -96,7 +96,7 @@ class Report(Base):
     def to_dict(self):
         return {
             'id': self.id,
-            'platform': self.platform,
+            'platform': getattr(self, 'platform', 'twitter'),  # Default to twitter if field missing
             'username': self.username,
             'keywords': self.keywords,
             'tweet_count': self.tweet_count,

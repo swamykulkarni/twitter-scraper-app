@@ -145,7 +145,7 @@ def debug_reports():
             for r in all_reports:
                 reports_data.append({
                     'id': r.id,
-                    'platform': r.platform,
+                    'platform': getattr(r, 'platform', 'twitter'),  # Handle missing platform field
                     'username': r.username,
                     'keywords': r.keywords,
                     'tweet_count': r.tweet_count,
@@ -163,7 +163,36 @@ def debug_reports():
         finally:
             db.close()
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
+@app.route('/debug/fix-platform-field', methods=['POST'])
+def fix_platform_field():
+    """Add platform field to existing reports that don't have it"""
+    try:
+        db = get_db_session()
+        try:
+            # Update all reports without platform field
+            updated = db.execute(
+                "UPDATE reports SET platform = 'twitter' WHERE platform IS NULL"
+            )
+            db.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'Updated {updated.rowcount} reports with platform field'
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
 
 @app.route('/scrape', methods=['POST'])
 def scrape():
