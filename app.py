@@ -5,7 +5,7 @@ from datetime import datetime
 from twitter_scraper import TwitterScraper
 from reddit_scraper import RedditScraper
 from scheduler import ScheduledScraper
-from database import init_db, get_db_session, Report, Schedule as DBSchedule, HistoricalTweet, engine
+from database import init_db, get_db_session, Report, Schedule as DBSchedule, HistoricalTweet, engine, save_to_deep_history
 
 # Social Listening Platform - v2.5 (Similar Accounts Feature)
 app = Flask(__name__)
@@ -318,6 +318,29 @@ def scrape():
             db.add(db_report)
             db.commit()
             report_id = db_report.id
+            
+            # Save to deep_history for AI/ML features
+            try:
+                save_to_deep_history(
+                    username=username,
+                    platform='twitter',
+                    raw_json={
+                        'tweets': tweets_data['data'],
+                        'account_info': user_profile,
+                        'keywords': keywords,
+                        'lead_score': account_analysis.get('score'),
+                        'account_type': account_analysis.get('type'),
+                        'avg_sentiment': account_analysis.get('avg_sentiment')
+                    },
+                    raw_text=report_content,
+                    report_id=report_id,
+                    scrape_type='quick',
+                    filters_used=filters
+                )
+            except Exception as dh_error:
+                print(f"[WARNING] Failed to save to deep_history: {dh_error}")
+                # Don't fail the request if deep_history fails
+                
         finally:
             db.close()
         
@@ -381,6 +404,25 @@ def scrape_reddit():
             db.add(db_report)
             db.commit()
             report_id = db_report.id
+            
+            # Save to deep_history for AI/ML features
+            try:
+                save_to_deep_history(
+                    username=subreddit,
+                    platform='reddit',
+                    raw_json={
+                        'posts': posts_data['data'],
+                        'keywords': keywords,
+                        'time_filter': time_filter
+                    },
+                    raw_text=report_content,
+                    report_id=report_id,
+                    scrape_type='quick',
+                    filters_used={'time_filter': time_filter}
+                )
+            except Exception as dh_error:
+                print(f"[WARNING] Failed to save to deep_history: {dh_error}")
+                
         finally:
             db.close()
         
@@ -512,6 +554,27 @@ def bulk_scrape():
                         db.add(db_report)
                         db.commit()
                         report_id = db_report.id
+                        
+                        # Save to deep_history for AI/ML features
+                        try:
+                            save_to_deep_history(
+                                username=username,
+                                platform='twitter',
+                                raw_json={
+                                    'tweets': tweets_data['data'],
+                                    'account_info': user_profile,
+                                    'keywords': keywords,
+                                    'lead_score': account_analysis.get('score'),
+                                    'account_type': account_analysis.get('type')
+                                },
+                                raw_text=report_content,
+                                report_id=report_id,
+                                scrape_type='bulk',
+                                filters_used=filters
+                            )
+                        except Exception as dh_error:
+                            print(f"[WARNING] Failed to save to deep_history: {dh_error}")
+                            
                     finally:
                         db.close()
                     
