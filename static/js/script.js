@@ -597,7 +597,6 @@ document.getElementById('discoverForm').addEventListener('submit', async (e) => 
     // Collect filters
     const filters = {
         min_followers: parseInt(document.getElementById('discover-min-followers').value) || 0,
-        location: document.getElementById('discover-location').value.trim(),
         verified_only: document.getElementById('discover-verified-only').checked,
         has_links: document.getElementById('discover-has-links').checked,
         exclude_retweets: document.getElementById('discover-exclude-retweets').checked

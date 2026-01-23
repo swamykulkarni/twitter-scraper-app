@@ -160,13 +160,6 @@ class TwitterScraper:
                         if followers < filters['min_followers']:
                             continue
                     
-                    # Apply location filter
-                    if filters and filters.get('location'):
-                        user_location = user_info.get('location', '').lower()
-                        filter_location = filters['location'].lower()
-                        if filter_location not in user_location:
-                            continue
-                    
                     # Count tweets from this user in results
                     tweet_count = sum(1 for t in tweets_data['data'] if t.get('author_id') == author_id)
                     
