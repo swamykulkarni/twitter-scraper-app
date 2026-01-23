@@ -427,6 +427,39 @@ def discover_accounts():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/find-similar-accounts', methods=['POST'])
+def find_similar_accounts():
+    """Find accounts similar to a reference account"""
+    try:
+        data = request.json
+        reference_username = data.get('reference_username', '').strip().replace('@', '')
+        max_results = data.get('max_results', 100)
+        filters = data.get('filters', {})
+        
+        if not reference_username:
+            return jsonify({'error': 'Reference username is required'}), 400
+        
+        scraper = TwitterScraper()
+        similar_data = scraper.find_similar_accounts(reference_username, max_results=max_results, filters=filters)
+        
+        if not similar_data:
+            return jsonify({'error': 'Could not analyze reference account'}), 404
+        
+        return jsonify({
+            'success': True,
+            'accounts': similar_data['accounts'],
+            'total_accounts': similar_data['total_accounts'],
+            'reference_account': similar_data['reference_account'],
+            'extracted_keywords': similar_data['extracted_keywords'],
+            'tweets_searched': similar_data.get('tweets_searched', 0),
+            'message': similar_data.get('message', '')
+        })
+    
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/bulk-scrape', methods=['POST'])
 def bulk_scrape():
     """Scrape multiple Twitter accounts at once"""

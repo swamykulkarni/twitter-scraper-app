@@ -149,18 +149,45 @@
         <div id="discover-tab" class="tab-content">
             <div class="card">
                 <h2>🔍 Account Discovery</h2>
-                <p>Search for Twitter accounts based on keywords, then bulk scrape selected accounts</p>
+                <p>Search for Twitter accounts based on keywords or find accounts similar to a reference account</p>
                 
                 <form id="discoverForm">
+                    <!-- Discovery Mode Toggle -->
                     <div class="form-group">
-                        <label for="discover-keywords">Search Keywords</label>
-                        <input 
-                            type="text" 
-                            id="discover-keywords" 
-                            placeholder="e.g., GCC, manufacturing, Pune (comma-separated)"
-                            required
-                        >
-                        <small>Find accounts that have tweeted about these topics</small>
+                        <label style="display: flex; align-items: center; gap: 10px;">
+                            <input type="checkbox" id="similar-mode-toggle" style="width: auto;">
+                            <span>Find accounts similar to a reference account</span>
+                        </label>
+                    </div>
+
+                    <!-- Keyword Search (default) -->
+                    <div id="keyword-search-section">
+                        <div class="form-group">
+                            <label for="discover-keywords">Search Keywords</label>
+                            <input 
+                                type="text" 
+                                id="discover-keywords" 
+                                placeholder="e.g., GCC, manufacturing, Pune (comma-separated)"
+                            >
+                            <small>Find accounts that have tweeted about these topics</small>
+                        </div>
+                    </div>
+
+                    <!-- Similar Account Search -->
+                    <div id="similar-search-section" style="display: none;">
+                        <div class="form-group">
+                            <label for="reference-username">Reference Account</label>
+                            <input 
+                                type="text" 
+                                id="reference-username" 
+                                placeholder="e.g., @elonmusk or elonmusk"
+                            >
+                            <small>We'll analyze this account and find similar ones</small>
+                        </div>
+                        <div id="reference-preview" style="display: none; padding: 15px; background: #f7f9fa; border-radius: 8px; margin-top: 10px;">
+                            <strong>Reference Account:</strong>
+                            <div id="reference-info" style="margin-top: 8px;"></div>
+                        </div>
                     </div>
 
                     <div class="advanced-filters">

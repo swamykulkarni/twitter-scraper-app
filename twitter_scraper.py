@@ -624,6 +624,173 @@ class TwitterScraper:
         
         print(f"Report saved to: {filename}")
         return filename
+    
+    def find_similar_accounts(self, reference_username, max_results=100, filters=None):
+        """
+        Find accounts similar to a reference account
+        
+        Args:
+            reference_username: Username of the reference account (without @)
+            max_results: Maximum number of tweets to search through
+            filters: Dict with filters (min_followers, verified_only, etc.)
+        
+        Returns:
+            Dict with similar accounts and analysis
+        """
+        if not self.bearer_token:
+            raise ValueError("TWITTER_BEARER_TOKEN not found in .env file")
+        
+        # Step 1: Get reference account info and recent tweets
+        print(f"Analyzing reference account: @{reference_username}")
+        
+        # Get user info
+        user_endpoint = f"{self.base_url}/users/by/username/{reference_username}"
+        user_params = {
+            "user.fields": "username,name,verified,public_metrics,description,location,profile_image_url,created_at"
+        }
+        
+        user_response = requests.get(user_endpoint, headers=self.headers, params=user_params)
+        
+        if user_response.status_code != 200:
+            raise ValueError(f"Could not find account @{reference_username}")
+        
+        reference_user = user_response.json().get('data')
+        if not reference_user:
+            raise ValueError(f"Could not find account @{reference_username}")
+        
+        # Get recent tweets from reference account
+        tweets_endpoint = f"{self.base_url}/users/{reference_user['id']}/tweets"
+        tweets_params = {
+            "max_results": 10,
+            "tweet.fields": "created_at,public_metrics,entities",
+            "exclude": "retweets,replies"
+        }
+        
+        tweets_response = requests.get(tweets_endpoint, headers=self.headers, params=tweets_params)
+        reference_tweets = []
+        
+        if tweets_response.status_code == 200:
+            tweets_data = tweets_response.json()
+            if 'data' in tweets_data:
+                reference_tweets = tweets_data['data']
+        
+        # Step 2: Extract keywords from reference account
+        keywords = self._extract_keywords_from_account(reference_user, reference_tweets)
+        
+        print(f"Extracted keywords: {', '.join(keywords[:10])}")
+        
+        # Step 3: Search for accounts using extracted keywords
+        if not keywords:
+            return {
+                'accounts': [],
+                'total_accounts': 0,
+                'reference_account': {
+                    'username': reference_user['username'],
+                    'name': reference_user['name'],
+                    'description': reference_user.get('description', ''),
+                    'followers': reference_user.get('public_metrics', {}).get('followers_count', 0)
+                },
+                'extracted_keywords': [],
+                'message': 'Could not extract enough keywords from reference account'
+            }
+        
+        # Use discover_accounts with extracted keywords
+        discovery_result = self.discover_accounts(keywords[:5], max_results, filters)
+        
+        if not discovery_result:
+            return {
+                'accounts': [],
+                'total_accounts': 0,
+                'reference_account': {
+                    'username': reference_user['username'],
+                    'name': reference_user['name'],
+                    'description': reference_user.get('description', ''),
+                    'followers': reference_user.get('public_metrics', {}).get('followers_count', 0)
+                },
+                'extracted_keywords': keywords,
+                'message': 'No similar accounts found'
+            }
+        
+        # Filter out the reference account itself
+        similar_accounts = [
+            acc for acc in discovery_result['accounts'] 
+            if acc['username'].lower() != reference_username.lower()
+        ]
+        
+        return {
+            'accounts': similar_accounts,
+            'total_accounts': len(similar_accounts),
+            'reference_account': {
+                'username': reference_user['username'],
+                'name': reference_user['name'],
+                'description': reference_user.get('description', ''),
+                'followers': reference_user.get('public_metrics', {}).get('followers_count', 0),
+                'verified': reference_user.get('verified', False),
+                'profile_image_url': reference_user.get('profile_image_url', '')
+            },
+            'extracted_keywords': keywords,
+            'tweets_searched': discovery_result.get('tweets_searched', 0)
+        }
+    
+    def _extract_keywords_from_account(self, user_info, tweets):
+        """
+        Extract relevant keywords from account bio and tweets
+        """
+        import re
+        from collections import Counter
+        
+        keywords = []
+        
+        # Extract from bio/description
+        description = user_info.get('description', '')
+        if description:
+            # Remove URLs, mentions, hashtags
+            clean_desc = re.sub(r'http\S+|@\w+|#\w+', '', description)
+            # Extract words (3+ characters)
+            words = re.findall(r'\b[a-zA-Z]{3,}\b', clean_desc.lower())
+            keywords.extend(words)
+        
+        # Extract from tweets
+        tweet_text_combined = ''
+        hashtags = []
+        
+        for tweet in tweets:
+            text = tweet.get('text', '')
+            tweet_text_combined += ' ' + text
+            
+            # Extract hashtags
+            entities = tweet.get('entities', {})
+            if 'hashtags' in entities:
+                for tag in entities['hashtags']:
+                    hashtags.append(tag['tag'].lower())
+        
+        # Extract words from tweets
+        clean_tweets = re.sub(r'http\S+|@\w+|#\w+|RT', '', tweet_text_combined)
+        tweet_words = re.findall(r'\b[a-zA-Z]{3,}\b', clean_tweets.lower())
+        keywords.extend(tweet_words)
+        
+        # Add hashtags (they're usually important)
+        keywords.extend(hashtags)
+        
+        # Remove common stop words
+        stop_words = {
+            'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her', 'was', 'one',
+            'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'its', 'may', 'new', 'now',
+            'old', 'see', 'two', 'who', 'boy', 'did', 'let', 'put', 'say', 'she', 'too', 'use',
+            'with', 'this', 'that', 'from', 'have', 'they', 'will', 'what', 'been', 'more',
+            'when', 'your', 'than', 'them', 'some', 'time', 'very', 'just', 'know', 'take',
+            'into', 'year', 'good', 'make', 'over', 'think', 'also', 'back', 'after', 'come',
+            'most', 'work', 'first', 'well', 'way', 'even', 'want', 'because', 'these', 'give',
+            'about', 'being', 'doing', 'going', 'having', 'making', 'saying', 'taking', 'using'
+        }
+        
+        keywords = [k for k in keywords if k not in stop_words and len(k) >= 3]
+        
+        # Count frequency and return top keywords
+        keyword_counts = Counter(keywords)
+        top_keywords = [word for word, count in keyword_counts.most_common(20)]
+        
+        return top_keywords
 
 
 def main():

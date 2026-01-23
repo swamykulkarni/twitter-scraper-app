@@ -587,11 +587,32 @@ let allAccounts = []; // Store all accounts for filtering/sorting
 let currentPage = 1;
 let accountsPerPage = 10;
 let filteredAccounts = []; // Currently filtered/sorted accounts
+let isSimilarMode = false;
+
+// Toggle between keyword and similar account search
+document.getElementById('similar-mode-toggle').addEventListener('change', (e) => {
+    isSimilarMode = e.target.checked;
+    const keywordSection = document.getElementById('keyword-search-section');
+    const similarSection = document.getElementById('similar-search-section');
+    const keywordsInput = document.getElementById('discover-keywords');
+    const referenceInput = document.getElementById('reference-username');
+    
+    if (isSimilarMode) {
+        keywordSection.style.display = 'none';
+        similarSection.style.display = 'block';
+        keywordsInput.removeAttribute('required');
+        referenceInput.setAttribute('required', 'required');
+    } else {
+        keywordSection.style.display = 'block';
+        similarSection.style.display = 'none';
+        keywordsInput.setAttribute('required', 'required');
+        referenceInput.removeAttribute('required');
+    }
+});
 
 document.getElementById('discoverForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    const keywords = document.getElementById('discover-keywords').value.trim();
     const maxResults = document.getElementById('discover-max-results').value;
     
     // Collect filters
@@ -612,6 +633,7 @@ document.getElementById('discoverForm').addEventListener('submit', async (e) => 
     resultsDiv.style.display = 'none';
     errorDiv.style.display = 'none';
     document.getElementById('bulk-results').style.display = 'none';
+    document.getElementById('reference-preview').style.display = 'none';
     
     // Show loading state
     submitBtn.disabled = true;
@@ -619,13 +641,59 @@ document.getElementById('discoverForm').addEventListener('submit', async (e) => 
     btnLoader.style.display = 'block';
     
     try {
-        const response = await fetch('/discover-accounts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ keywords, max_results: parseInt(maxResults), filters })
-        });
+        let response, data;
         
-        const data = await response.json();
+        if (isSimilarMode) {
+            // Similar account search
+            const referenceUsername = document.getElementById('reference-username').value.trim().replace('@', '');
+            
+            if (!referenceUsername) {
+                throw new Error('Reference username is required');
+            }
+            
+            response = await fetch('/find-similar-accounts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reference_username: referenceUsername, max_results: parseInt(maxResults), filters })
+            });
+            
+            data = await response.json();
+            
+            if (response.ok) {
+                // Show reference account info
+                const refAccount = data.reference_account;
+                document.getElementById('reference-info').innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        ${refAccount.profile_image_url ? `<img src="${refAccount.profile_image_url}" style="width: 48px; height: 48px; border-radius: 50%;">` : ''}
+                        <div>
+                            <strong>${refAccount.name}</strong> @${refAccount.username}
+                            ${refAccount.verified ? '<span class="verified-badge">✓</span>' : ''}
+                            <br>
+                            <small>${refAccount.followers.toLocaleString()} followers</small>
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <strong>Extracted Keywords:</strong> ${data.extracted_keywords.slice(0, 10).join(', ')}
+                    </div>
+                `;
+                document.getElementById('reference-preview').style.display = 'block';
+            }
+        } else {
+            // Keyword search
+            const keywords = document.getElementById('discover-keywords').value.trim();
+            
+            if (!keywords) {
+                throw new Error('Keywords are required');
+            }
+            
+            response = await fetch('/discover-accounts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ keywords, max_results: parseInt(maxResults), filters })
+            });
+            
+            data = await response.json();
+        }
         
         if (response.ok) {
             allAccounts = data.accounts;
