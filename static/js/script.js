@@ -578,3 +578,242 @@ document.addEventListener('click', (e) => {
         }
     }
 });
+
+
+// Account Discovery
+let discoveredAccounts = [];
+let selectedAccounts = new Set();
+
+document.getElementById('discoverForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const keywords = document.getElementById('discover-keywords').value.trim();
+    const maxResults = document.getElementById('discover-max-results').value;
+    
+    const submitBtn = document.getElementById('discoverBtn');
+    const btnText = document.getElementById('discoverBtnText');
+    const btnLoader = document.getElementById('discoverBtnLoader');
+    const resultsDiv = document.getElementById('discovery-results');
+    const errorDiv = document.getElementById('discover-error');
+    
+    // Hide previous results
+    resultsDiv.style.display = 'none';
+    errorDiv.style.display = 'none';
+    document.getElementById('bulk-results').style.display = 'none';
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    btnText.textContent = '🔍 Searching...';
+    btnLoader.style.display = 'block';
+    
+    try {
+        const response = await fetch('/discover-accounts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keywords, max_results: parseInt(maxResults) })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            discoveredAccounts = data.accounts;
+            selectedAccounts.clear();
+            
+            displayDiscoveredAccounts(data.accounts);
+            
+            document.getElementById('accounts-count').textContent = 
+                `${data.total_accounts} account${data.total_accounts !== 1 ? 's' : ''} found`;
+            
+            resultsDiv.style.display = 'block';
+        } else {
+            document.getElementById('discoverErrorMessage').textContent = data.error;
+            errorDiv.style.display = 'block';
+        }
+    } catch (error) {
+        document.getElementById('discoverErrorMessage').textContent = 
+            'Network error. Please check your connection and try again.';
+        errorDiv.style.display = 'block';
+    } finally {
+        submitBtn.disabled = false;
+        btnText.textContent = '🔍 Discover Accounts';
+        btnLoader.style.display = 'none';
+    }
+});
+
+function displayDiscoveredAccounts(accounts) {
+    const container = document.getElementById('accounts-container');
+    
+    if (accounts.length === 0) {
+        container.innerHTML = '<p style="color: #666;">No accounts found. Try different keywords.</p>';
+        return;
+    }
+    
+    container.innerHTML = accounts.map(account => `
+        <div class="account-card" data-username="${account.username}">
+            <input type="checkbox" class="account-checkbox" data-username="${account.username}">
+            <img src="${account.profile_image_url || 'https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png'}" 
+                 alt="${account.name}" class="account-avatar">
+            <div class="account-info">
+                <div class="account-name">
+                    ${account.name}
+                    ${account.verified ? '<span class="verified-badge">✓</span>' : ''}
+                </div>
+                <div class="account-username">@${account.username}</div>
+                ${account.description ? `<div class="account-description">${account.description.substring(0, 150)}${account.description.length > 150 ? '...' : ''}</div>` : ''}
+                <div class="account-stats">
+                    <div class="account-stat">
+                        <span>👥</span>
+                        <strong>${formatNumber(account.followers_count)}</strong> followers
+                    </div>
+                    <div class="account-stat">
+                        <span>📝</span>
+                        <strong>${account.matching_tweets}</strong> matching tweets
+                    </div>
+                    ${account.location ? `<div class="account-stat"><span>📍</span>${account.location}</div>` : ''}
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    // Add event listeners to checkboxes
+    document.querySelectorAll('.account-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const username = this.getAttribute('data-username');
+            const card = this.closest('.account-card');
+            
+            if (this.checked) {
+                selectedAccounts.add(username);
+                card.classList.add('selected');
+            } else {
+                selectedAccounts.delete(username);
+                card.classList.remove('selected');
+            }
+            
+            updateSelectedCount();
+        });
+    });
+}
+
+function formatNumber(num) {
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+}
+
+function updateSelectedCount() {
+    document.getElementById('selected-count').textContent = selectedAccounts.size;
+    document.getElementById('bulk-scrape-btn').disabled = selectedAccounts.size === 0;
+}
+
+// Select/Deselect All
+document.getElementById('select-all-accounts').addEventListener('click', () => {
+    document.querySelectorAll('.account-checkbox').forEach(checkbox => {
+        checkbox.checked = true;
+        const username = checkbox.getAttribute('data-username');
+        selectedAccounts.add(username);
+        checkbox.closest('.account-card').classList.add('selected');
+    });
+    updateSelectedCount();
+});
+
+document.getElementById('deselect-all-accounts').addEventListener('click', () => {
+    document.querySelectorAll('.account-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+        const username = checkbox.getAttribute('data-username');
+        selectedAccounts.delete(username);
+        checkbox.closest('.account-card').classList.remove('selected');
+    });
+    updateSelectedCount();
+});
+
+// Bulk Scrape
+document.getElementById('bulk-scrape-btn').addEventListener('click', async () => {
+    if (selectedAccounts.size === 0) {
+        alert('Please select at least one account');
+        return;
+    }
+    
+    const keywords = document.getElementById('discover-keywords').value.trim();
+    const usernames = Array.from(selectedAccounts);
+    
+    const progressDiv = document.getElementById('bulk-progress');
+    const resultsDiv = document.getElementById('bulk-results');
+    const progressDetails = document.getElementById('bulk-progress-details');
+    
+    progressDiv.style.display = 'block';
+    resultsDiv.style.display = 'none';
+    progressDetails.innerHTML = '<p>Starting bulk scrape...</p>';
+    
+    try {
+        const response = await fetch('/bulk-scrape', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                usernames, 
+                keywords,
+                min_keyword_mentions: 1
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            progressDiv.style.display = 'none';
+            
+            // Show results
+            document.getElementById('bulk-results-message').textContent = 
+                `Successfully scraped ${data.successful} of ${data.total_processed} accounts`;
+            
+            let detailsHTML = '<div style="margin-top: 15px;">';
+            
+            // Successful scrapes
+            if (data.results.length > 0) {
+                detailsHTML += '<h4 style="color: #4caf50;">✓ Successful:</h4>';
+                data.results.forEach(result => {
+                    detailsHTML += `
+                        <div class="bulk-progress-item success">
+                            <strong>@${result.username}</strong>: ${result.tweet_count} tweets
+                            ${result.account_type ? ` • ${result.account_type}` : ''}
+                            ${result.lead_score ? ` • Lead Score: ${result.lead_score}/7` : ''}
+                        </div>
+                    `;
+                });
+            }
+            
+            // Errors
+            if (data.errors.length > 0) {
+                detailsHTML += '<h4 style="color: #f44336; margin-top: 15px;">✗ Failed:</h4>';
+                data.errors.forEach(error => {
+                    detailsHTML += `
+                        <div class="bulk-progress-item error">
+                            <strong>@${error.username}</strong>: ${error.error}
+                        </div>
+                    `;
+                });
+            }
+            
+            detailsHTML += '</div>';
+            detailsHTML += '<p style="margin-top: 15px;"><a href="#" onclick="document.querySelector(\'[data-tab=\\\'history\\\']\').click(); return false;">View all reports in Report History →</a></p>';
+            
+            document.getElementById('bulk-results-details').innerHTML = detailsHTML;
+            resultsDiv.style.display = 'block';
+            
+            // Clear selections
+            selectedAccounts.clear();
+            updateSelectedCount();
+            document.querySelectorAll('.account-checkbox').forEach(cb => {
+                cb.checked = false;
+                cb.closest('.account-card').classList.remove('selected');
+            });
+        } else {
+            progressDiv.style.display = 'none';
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        progressDiv.style.display = 'none';
+        alert('Network error: ' + error.message);
+    }
+});

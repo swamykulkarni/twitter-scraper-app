@@ -145,6 +145,85 @@
             </div>
         </div>
 
+        <!-- Account Discovery Tab -->
+        <div id="discover-tab" class="tab-content">
+            <div class="card">
+                <h2>🔍 Account Discovery</h2>
+                <p>Search for Twitter accounts based on keywords, then bulk scrape selected accounts</p>
+                
+                <form id="discoverForm">
+                    <div class="form-group">
+                        <label for="discover-keywords">Search Keywords</label>
+                        <input 
+                            type="text" 
+                            id="discover-keywords" 
+                            placeholder="e.g., GCC, manufacturing, Pune (comma-separated)"
+                            required
+                        >
+                        <small>Find accounts that have tweeted about these topics</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="discover-max-results">Max Tweets to Search</label>
+                        <select id="discover-max-results">
+                            <option value="50">50 tweets</option>
+                            <option value="100" selected>100 tweets</option>
+                        </select>
+                        <small>More tweets = more accounts discovered (but slower)</small>
+                    </div>
+
+                    <button type="submit" id="discoverBtn" class="btn-primary">
+                        <span id="discoverBtnText">🔍 Discover Accounts</span>
+                        <span id="discoverBtnLoader" class="loader" style="display: none;"></span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Discovery Results -->
+            <div id="discovery-results" style="display: none;">
+                <div class="card">
+                    <div class="schedules-header">
+                        <h3>📋 Discovered Accounts</h3>
+                        <span id="accounts-count" class="status-label status-active">0 accounts</span>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <button id="select-all-accounts" class="btn-action">Select All</button>
+                        <button id="deselect-all-accounts" class="btn-action">Deselect All</button>
+                        <button id="bulk-scrape-btn" class="btn-primary" style="margin-left: 10px;">
+                            📊 Bulk Scrape Selected (<span id="selected-count">0</span>)
+                        </button>
+                    </div>
+
+                    <div id="accounts-container"></div>
+                </div>
+            </div>
+
+            <!-- Bulk Scrape Progress -->
+            <div id="bulk-progress" style="display: none;">
+                <div class="card">
+                    <h3>⏳ Bulk Scraping in Progress...</h3>
+                    <div id="bulk-progress-details"></div>
+                </div>
+            </div>
+
+            <!-- Bulk Scrape Results -->
+            <div id="bulk-results" style="display: none;">
+                <div class="card success">
+                    <h2>✓ Bulk Scraping Complete!</h2>
+                    <p id="bulk-results-message"></p>
+                    <div id="bulk-results-details"></div>
+                </div>
+            </div>
+
+            <div id="discover-error" class="results" style="display: none;">
+                <div class="card error">
+                    <h2>⚠️ Error</h2>
+                    <p id="discoverErrorMessage"></p>
+                </div>
+            </div>
+        </div>
+
         <!-- Reddit Scraping Tab -->
         <div id="reddit-tab" class="tab-content">
             <div class="card">
