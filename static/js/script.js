@@ -583,12 +583,22 @@ document.addEventListener('click', (e) => {
 // Account Discovery
 let discoveredAccounts = [];
 let selectedAccounts = new Set();
+let allAccounts = []; // Store all accounts for filtering/sorting
 
 document.getElementById('discoverForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const keywords = document.getElementById('discover-keywords').value.trim();
     const maxResults = document.getElementById('discover-max-results').value;
+    
+    // Collect filters
+    const filters = {
+        min_followers: parseInt(document.getElementById('discover-min-followers').value) || 0,
+        location: document.getElementById('discover-location').value.trim(),
+        verified_only: document.getElementById('discover-verified-only').checked,
+        has_links: document.getElementById('discover-has-links').checked,
+        exclude_retweets: document.getElementById('discover-exclude-retweets').checked
+    };
     
     const submitBtn = document.getElementById('discoverBtn');
     const btnText = document.getElementById('discoverBtnText');
@@ -610,12 +620,13 @@ document.getElementById('discoverForm').addEventListener('submit', async (e) => 
         const response = await fetch('/discover-accounts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ keywords, max_results: parseInt(maxResults) })
+            body: JSON.stringify({ keywords, max_results: parseInt(maxResults), filters })
         });
         
         const data = await response.json();
         
         if (response.ok) {
+            allAccounts = data.accounts;
             discoveredAccounts = data.accounts;
             selectedAccounts.clear();
             
@@ -644,36 +655,50 @@ function displayDiscoveredAccounts(accounts) {
     const container = document.getElementById('accounts-container');
     
     if (accounts.length === 0) {
-        container.innerHTML = '<p style="color: #666;">No accounts found. Try different keywords.</p>';
+        container.innerHTML = '<p style="color: #666;">No accounts found. Try different keywords or adjust filters.</p>';
         return;
     }
     
-    container.innerHTML = accounts.map(account => `
-        <div class="account-card" data-username="${account.username}">
-            <input type="checkbox" class="account-checkbox" data-username="${account.username}">
-            <img src="${account.profile_image_url || 'https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png'}" 
-                 alt="${account.name}" class="account-avatar">
-            <div class="account-info">
-                <div class="account-name">
-                    ${account.name}
-                    ${account.verified ? '<span class="verified-badge">✓</span>' : ''}
-                </div>
-                <div class="account-username">@${account.username}</div>
-                ${account.description ? `<div class="account-description">${account.description.substring(0, 150)}${account.description.length > 150 ? '...' : ''}</div>` : ''}
-                <div class="account-stats">
-                    <div class="account-stat">
-                        <span>👥</span>
-                        <strong>${formatNumber(account.followers_count)}</strong> followers
+    container.innerHTML = accounts.map(account => {
+        // Quality score color
+        let scoreColor = '#4caf50'; // green
+        if (account.quality_score < 40) scoreColor = '#f44336'; // red
+        else if (account.quality_score < 70) scoreColor = '#ff9800'; // orange
+        
+        // Account type badge color
+        let typeColor = '#2196f3'; // blue
+        if (account.account_type === 'Business') typeColor = '#4caf50'; // green
+        else if (account.account_type === 'Bot') typeColor = '#f44336'; // red
+        
+        return `
+            <div class="account-card" data-username="${account.username}" data-type="${account.account_type}" data-quality="${account.quality_score}">
+                <input type="checkbox" class="account-checkbox" data-username="${account.username}">
+                <img src="${account.profile_image_url || 'https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png'}" 
+                     alt="${account.name}" class="account-avatar">
+                <div class="account-info">
+                    <div class="account-name">
+                        ${account.name}
+                        ${account.verified ? '<span class="verified-badge">✓</span>' : ''}
+                        <span style="background: ${typeColor}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-left: 8px;">${account.account_type}</span>
+                        <span style="background: ${scoreColor}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-left: 4px;">Score: ${account.quality_score}</span>
                     </div>
-                    <div class="account-stat">
-                        <span>📝</span>
-                        <strong>${account.matching_tweets}</strong> matching tweets
+                    <div class="account-username">@${account.username}</div>
+                    ${account.description ? `<div class="account-description">${account.description.substring(0, 150)}${account.description.length > 150 ? '...' : ''}</div>` : ''}
+                    <div class="account-stats">
+                        <div class="account-stat">
+                            <span>👥</span>
+                            <strong>${formatNumber(account.followers_count)}</strong> followers
+                        </div>
+                        <div class="account-stat">
+                            <span>📝</span>
+                            <strong>${account.matching_tweets}</strong> matching tweets
+                        </div>
+                        ${account.location ? `<div class="account-stat"><span>📍</span>${account.location}</div>` : ''}
                     </div>
-                    ${account.location ? `<div class="account-stat"><span>📍</span>${account.location}</div>` : ''}
                 </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
     
     // Add event listeners to checkboxes
     document.querySelectorAll('.account-checkbox').forEach(checkbox => {
@@ -817,3 +842,61 @@ document.getElementById('bulk-scrape-btn').addEventListener('click', async () =>
         alert('Network error: ' + error.message);
     }
 });
+
+
+// Sort accounts
+document.getElementById('sort-accounts').addEventListener('change', (e) => {
+    const sortBy = e.target.value;
+    let sorted = [...allAccounts];
+    
+    if (sortBy === 'quality') {
+        sorted.sort((a, b) => b.quality_score - a.quality_score);
+    } else if (sortBy === 'followers') {
+        sorted.sort((a, b) => b.followers_count - a.followers_count);
+    } else if (sortBy === 'relevance') {
+        sorted.sort((a, b) => b.matching_tweets - a.matching_tweets);
+    }
+    
+    // Apply current type filter
+    const filterType = document.getElementById('filter-type').value;
+    sorted = applyTypeFilter(sorted, filterType);
+    
+    displayDiscoveredAccounts(sorted);
+});
+
+// Filter by account type
+document.getElementById('filter-type').addEventListener('change', (e) => {
+    const filterType = e.target.value;
+    const sortBy = document.getElementById('sort-accounts').value;
+    
+    let filtered = [...allAccounts];
+    
+    // Apply sort first
+    if (sortBy === 'quality') {
+        filtered.sort((a, b) => b.quality_score - a.quality_score);
+    } else if (sortBy === 'followers') {
+        filtered.sort((a, b) => b.followers_count - a.followers_count);
+    } else if (sortBy === 'relevance') {
+        filtered.sort((a, b) => b.matching_tweets - a.matching_tweets);
+    }
+    
+    // Then filter
+    filtered = applyTypeFilter(filtered, filterType);
+    
+    displayDiscoveredAccounts(filtered);
+    document.getElementById('accounts-count').textContent = 
+        `${filtered.length} account${filtered.length !== 1 ? 's' : ''} shown`;
+});
+
+function applyTypeFilter(accounts, filterType) {
+    if (filterType === 'all') {
+        return accounts;
+    } else if (filterType === 'business') {
+        return accounts.filter(a => a.account_type === 'Business');
+    } else if (filterType === 'professional') {
+        return accounts.filter(a => a.account_type === 'Professional');
+    } else if (filterType === 'verified') {
+        return accounts.filter(a => a.verified);
+    }
+    return accounts;
+}

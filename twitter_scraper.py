@@ -92,7 +92,7 @@ class TwitterScraper:
             print(f"Error getting user info: {response.status_code}")
             return None
     
-    def discover_accounts(self, keywords, max_results=100):
+    def discover_accounts(self, keywords, max_results=100, filters=None):
         """
         Discover Twitter accounts by searching tweets with keywords
         Returns unique accounts that have tweeted about the keywords
@@ -100,12 +100,22 @@ class TwitterScraper:
         Args:
             keywords: List of keywords to search for
             max_results: Maximum number of tweets to search through
+            filters: Dict with filters (min_followers, verified_only, location, etc.)
         """
         if not self.bearer_token:
             raise ValueError("TWITTER_BEARER_TOKEN not found in .env file")
         
         # Build query from keywords
         keyword_query = " OR ".join([f'"{k}"' for k in keywords])
+        
+        # Add filters to query
+        if filters:
+            if filters.get('verified_only'):
+                keyword_query += " is:verified"
+            if filters.get('has_links'):
+                keyword_query += " has:links"
+            if filters.get('exclude_retweets'):
+                keyword_query += " -is:retweet"
         
         # Search tweets
         endpoint = f"{self.base_url}/tweets/search/recent"
@@ -129,7 +139,7 @@ class TwitterScraper:
         if not tweets_data or 'data' not in tweets_data:
             return None
         
-        # Extract unique accounts
+        # Extract unique accounts with quality scoring
         accounts = {}
         for tweet in tweets_data['data']:
             author_id = tweet.get('author_id')
@@ -143,26 +153,48 @@ class TwitterScraper:
                             break
                 
                 if user_info:
+                    followers = user_info.get('public_metrics', {}).get('followers_count', 0)
+                    
+                    # Apply follower filter
+                    if filters and filters.get('min_followers'):
+                        if followers < filters['min_followers']:
+                            continue
+                    
+                    # Apply location filter
+                    if filters and filters.get('location'):
+                        user_location = user_info.get('location', '').lower()
+                        filter_location = filters['location'].lower()
+                        if filter_location not in user_location:
+                            continue
+                    
                     # Count tweets from this user in results
                     tweet_count = sum(1 for t in tweets_data['data'] if t.get('author_id') == author_id)
+                    
+                    # Calculate quality score
+                    quality_score = self._calculate_account_quality_score(user_info, tweet_count)
+                    
+                    # Detect account type
+                    account_type = self._detect_account_type(user_info)
                     
                     accounts[author_id] = {
                         'id': user_info['id'],
                         'username': user_info['username'],
                         'name': user_info['name'],
                         'description': user_info.get('description', ''),
-                        'followers_count': user_info.get('public_metrics', {}).get('followers_count', 0),
+                        'followers_count': followers,
                         'following_count': user_info.get('public_metrics', {}).get('following_count', 0),
                         'tweet_count': user_info.get('public_metrics', {}).get('tweet_count', 0),
                         'verified': user_info.get('verified', False),
                         'created_at': user_info.get('created_at', ''),
                         'profile_image_url': user_info.get('profile_image_url', ''),
                         'matching_tweets': tweet_count,
-                        'location': user_info.get('location', '')
+                        'location': user_info.get('location', ''),
+                        'quality_score': quality_score,
+                        'account_type': account_type
                     }
         
-        # Sort by matching tweets (most relevant first)
-        sorted_accounts = sorted(accounts.values(), key=lambda x: x['matching_tweets'], reverse=True)
+        # Sort by quality score (highest first)
+        sorted_accounts = sorted(accounts.values(), key=lambda x: x['quality_score'], reverse=True)
         
         return {
             'accounts': sorted_accounts,
@@ -170,6 +202,98 @@ class TwitterScraper:
             'search_keywords': keywords,
             'tweets_searched': len(tweets_data['data'])
         }
+    
+    def _calculate_account_quality_score(self, user_info, matching_tweets):
+        """
+        Calculate quality score for discovered accounts
+        Score 0-100 based on multiple factors
+        """
+        score = 0
+        
+        metrics = user_info.get('public_metrics', {})
+        followers = metrics.get('followers_count', 0)
+        following = metrics.get('following_count', 0)
+        total_tweets = metrics.get('tweet_count', 0)
+        
+        # Follower score (0-30 points)
+        if followers >= 10000:
+            score += 30
+        elif followers >= 5000:
+            score += 25
+        elif followers >= 1000:
+            score += 20
+        elif followers >= 500:
+            score += 15
+        elif followers >= 100:
+            score += 10
+        elif followers >= 50:
+            score += 5
+        
+        # Follower/Following ratio (0-15 points) - higher is better
+        if following > 0:
+            ratio = followers / following
+            if ratio >= 2:
+                score += 15
+            elif ratio >= 1:
+                score += 10
+            elif ratio >= 0.5:
+                score += 5
+        
+        # Verified account (20 points)
+        if user_info.get('verified'):
+            score += 20
+        
+        # Matching tweets relevance (0-20 points)
+        score += min(matching_tweets * 5, 20)
+        
+        # Account activity (0-10 points)
+        if total_tweets >= 1000:
+            score += 10
+        elif total_tweets >= 500:
+            score += 7
+        elif total_tweets >= 100:
+            score += 5
+        elif total_tweets >= 50:
+            score += 3
+        
+        # Has description (5 points)
+        if user_info.get('description'):
+            score += 5
+        
+        return min(score, 100)
+    
+    def _detect_account_type(self, user_info):
+        """
+        Detect if account is Business, Personal, or Bot
+        """
+        description = user_info.get('description', '').lower()
+        name = user_info.get('name', '').lower()
+        metrics = user_info.get('public_metrics', {})
+        
+        # Bot indicators
+        bot_keywords = ['bot', 'automated', 'auto tweet', 'rss feed']
+        if any(keyword in description or keyword in name for keyword in bot_keywords):
+            return 'Bot'
+        
+        # Business/Enterprise indicators
+        business_keywords = [
+            'ceo', 'founder', 'company', 'official', 'corp', 'inc', 'ltd',
+            'enterprise', 'business', 'organization', 'industry', 'manufacturer',
+            'solutions', 'services', 'consulting', 'technology', 'software'
+        ]
+        business_count = sum(1 for keyword in business_keywords if keyword in description or keyword in name)
+        
+        if business_count >= 2:
+            return 'Business'
+        elif business_count >= 1 and metrics.get('followers_count', 0) > 500:
+            return 'Business'
+        
+        # Professional indicators
+        professional_keywords = ['professional', 'expert', 'specialist', 'consultant', 'engineer', 'manager', 'director']
+        if any(keyword in description for keyword in professional_keywords):
+            return 'Professional'
+        
+        return 'Personal'
     
     def analyze_account_type(self, user_data):
         """Determine if account is enterprise/business/personal"""

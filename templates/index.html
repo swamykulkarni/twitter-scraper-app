@@ -163,13 +163,57 @@
                         <small>Find accounts that have tweeted about these topics</small>
                     </div>
 
-                    <div class="form-group">
-                        <label for="discover-max-results">Max Tweets to Search</label>
-                        <select id="discover-max-results">
-                            <option value="50">50 tweets</option>
-                            <option value="100" selected>100 tweets</option>
-                        </select>
-                        <small>More tweets = more accounts discovered (but slower)</small>
+                    <div class="advanced-filters">
+                        <h3>🎯 Quality Filters</h3>
+                        
+                        <div class="filter-row">
+                            <div class="form-group">
+                                <label for="discover-min-followers">Minimum Followers</label>
+                                <select id="discover-min-followers">
+                                    <option value="0">Any</option>
+                                    <option value="50">50+</option>
+                                    <option value="100">100+</option>
+                                    <option value="500">500+</option>
+                                    <option value="1000" selected>1,000+</option>
+                                    <option value="5000">5,000+</option>
+                                    <option value="10000">10,000+</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="discover-location">Location (optional)</label>
+                                <input 
+                                    type="text" 
+                                    id="discover-location" 
+                                    placeholder="e.g., India, Pune, Mumbai"
+                                >
+                            </div>
+
+                            <div class="form-group">
+                                <label for="discover-max-results">Max Tweets to Search</label>
+                                <select id="discover-max-results">
+                                    <option value="50">50 tweets</option>
+                                    <option value="100" selected>100 tweets</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="filter-checkboxes">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="discover-verified-only">
+                                <span>Verified accounts only</span>
+                            </label>
+                            
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="discover-has-links">
+                                <span>Must have links in tweets</span>
+                            </label>
+                            
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="discover-exclude-retweets" checked>
+                                <span>Exclude retweets</span>
+                            </label>
+                        </div>
                     </div>
 
                     <button type="submit" id="discoverBtn" class="btn-primary">
@@ -187,12 +231,29 @@
                         <span id="accounts-count" class="status-label status-active">0 accounts</span>
                     </div>
                     
-                    <div style="margin-bottom: 15px;">
-                        <button id="select-all-accounts" class="btn-action">Select All</button>
-                        <button id="deselect-all-accounts" class="btn-action">Deselect All</button>
-                        <button id="bulk-scrape-btn" class="btn-primary" style="margin-left: 10px;">
-                            📊 Bulk Scrape Selected (<span id="selected-count">0</span>)
-                        </button>
+                    <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <button id="select-all-accounts" class="btn-action">Select All</button>
+                            <button id="deselect-all-accounts" class="btn-action">Deselect All</button>
+                            <button id="bulk-scrape-btn" class="btn-primary" style="margin-left: 10px;">
+                                📊 Bulk Scrape Selected (<span id="selected-count">0</span>)
+                            </button>
+                        </div>
+                        <div>
+                            <label for="sort-accounts" style="margin-right: 8px;">Sort by:</label>
+                            <select id="sort-accounts" style="padding: 5px;">
+                                <option value="quality">Quality Score</option>
+                                <option value="followers">Followers</option>
+                                <option value="relevance">Relevance</option>
+                            </select>
+                            <label for="filter-type" style="margin-left: 15px; margin-right: 8px;">Show:</label>
+                            <select id="filter-type" style="padding: 5px;">
+                                <option value="all">All Accounts</option>
+                                <option value="business">Business Only</option>
+                                <option value="professional">Professional Only</option>
+                                <option value="verified">Verified Only</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div id="accounts-container"></div>

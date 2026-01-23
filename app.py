@@ -403,6 +403,7 @@ def discover_accounts():
         data = request.json
         keywords_input = data.get('keywords', '').strip()
         max_results = data.get('max_results', 100)
+        filters = data.get('filters', {})
         
         if not keywords_input:
             return jsonify({'error': 'Keywords are required'}), 400
@@ -410,7 +411,7 @@ def discover_accounts():
         keywords = [k.strip() for k in keywords_input.split(',')]
         
         scraper = TwitterScraper()
-        accounts_data = scraper.discover_accounts(keywords, max_results=max_results)
+        accounts_data = scraper.discover_accounts(keywords, max_results=max_results, filters=filters)
         
         if not accounts_data:
             return jsonify({'error': 'No accounts found'}), 404
