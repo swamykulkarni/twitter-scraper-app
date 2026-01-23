@@ -169,7 +169,7 @@ def debug_reports():
             'traceback': traceback.format_exc()
         }), 500
 
-@app.route('/debug/fix-platform-field', methods=['POST'])
+@app.route('/debug/fix-platform-field', methods=['GET', 'POST'])
 def fix_platform_field():
     """Add platform field to existing reports that don't have it"""
     try:
@@ -183,7 +183,8 @@ def fix_platform_field():
             
             return jsonify({
                 'success': True,
-                'message': f'Updated {updated.rowcount} reports with platform field'
+                'message': f'Updated {updated.rowcount} reports with platform field',
+                'updated_count': updated.rowcount
             })
         finally:
             db.close()
