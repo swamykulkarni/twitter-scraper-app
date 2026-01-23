@@ -396,6 +396,121 @@ def scrape_reddit():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/discover-accounts', methods=['POST'])
+def discover_accounts():
+    """Discover Twitter accounts based on keywords"""
+    try:
+        data = request.json
+        keywords_input = data.get('keywords', '').strip()
+        max_results = data.get('max_results', 100)
+        
+        if not keywords_input:
+            return jsonify({'error': 'Keywords are required'}), 400
+        
+        keywords = [k.strip() for k in keywords_input.split(',')]
+        
+        scraper = TwitterScraper()
+        accounts_data = scraper.discover_accounts(keywords, max_results=max_results)
+        
+        if not accounts_data:
+            return jsonify({'error': 'No accounts found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'accounts': accounts_data['accounts'],
+            'total_accounts': accounts_data['total_accounts'],
+            'search_keywords': accounts_data['search_keywords'],
+            'tweets_searched': accounts_data['tweets_searched']
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/bulk-scrape', methods=['POST'])
+def bulk_scrape():
+    """Scrape multiple Twitter accounts at once"""
+    try:
+        data = request.json
+        usernames = data.get('usernames', [])
+        keywords_input = data.get('keywords', '').strip()
+        filters = data.get('filters', {})
+        min_keyword_mentions = data.get('min_keyword_mentions', 1)
+        
+        if not usernames or len(usernames) == 0:
+            return jsonify({'error': 'At least one username is required'}), 400
+        
+        keywords = [k.strip() for k in keywords_input.split(',')] if keywords_input else None
+        
+        scraper = TwitterScraper()
+        results = []
+        errors = []
+        
+        for username in usernames:
+            try:
+                tweets_data = scraper.search_user_tweets(username, keywords=keywords, max_results=100, filters=filters)
+                
+                if tweets_data and 'data' in tweets_data:
+                    report_file = scraper.generate_report(tweets_data, username, keywords, min_keyword_mentions)
+                    
+                    # Read report content
+                    with open(report_file, 'r', encoding='utf-8') as f:
+                        report_content = f.read()
+                    
+                    # Get account analysis
+                    user_profile = tweets_data.get('user_profile', {})
+                    account_analysis = scraper.analyze_account_type(user_profile) if user_profile else {}
+                    
+                    # Save to database
+                    db = get_db_session()
+                    try:
+                        db_report = Report(
+                            platform='twitter',
+                            username=username,
+                            keywords=keywords,
+                            tweet_count=len(tweets_data['data']),
+                            account_type=account_analysis.get('type'),
+                            lead_score=account_analysis.get('score'),
+                            report_content=report_content,
+                            tweets_data=tweets_data,
+                            filters=filters
+                        )
+                        db.add(db_report)
+                        db.commit()
+                        report_id = db_report.id
+                    finally:
+                        db.close()
+                    
+                    results.append({
+                        'username': username,
+                        'success': True,
+                        'report_id': report_id,
+                        'tweet_count': len(tweets_data['data']),
+                        'account_type': account_analysis.get('type'),
+                        'lead_score': account_analysis.get('score')
+                    })
+                else:
+                    errors.append({
+                        'username': username,
+                        'error': 'No tweets found'
+                    })
+            except Exception as e:
+                errors.append({
+                    'username': username,
+                    'error': str(e)
+                })
+        
+        return jsonify({
+            'success': True,
+            'results': results,
+            'errors': errors,
+            'total_processed': len(usernames),
+            'successful': len(results),
+            'failed': len(errors)
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/reports', methods=['GET'])
 def get_reports():
     """Get list of all reports"""

@@ -92,6 +92,85 @@ class TwitterScraper:
             print(f"Error getting user info: {response.status_code}")
             return None
     
+    def discover_accounts(self, keywords, max_results=100):
+        """
+        Discover Twitter accounts by searching tweets with keywords
+        Returns unique accounts that have tweeted about the keywords
+        
+        Args:
+            keywords: List of keywords to search for
+            max_results: Maximum number of tweets to search through
+        """
+        if not self.bearer_token:
+            raise ValueError("TWITTER_BEARER_TOKEN not found in .env file")
+        
+        # Build query from keywords
+        keyword_query = " OR ".join([f'"{k}"' for k in keywords])
+        
+        # Search tweets
+        endpoint = f"{self.base_url}/tweets/search/recent"
+        params = {
+            "query": keyword_query,
+            "max_results": min(max_results, 100),
+            "tweet.fields": "created_at,public_metrics,author_id",
+            "expansions": "author_id",
+            "user.fields": "username,name,verified,public_metrics,description,location,profile_image_url,created_at"
+        }
+        
+        response = requests.get(endpoint, headers=self.headers, params=params)
+        
+        if response.status_code != 200:
+            print(f"Error: {response.status_code}")
+            print(response.text)
+            return None
+        
+        tweets_data = response.json()
+        
+        if not tweets_data or 'data' not in tweets_data:
+            return None
+        
+        # Extract unique accounts
+        accounts = {}
+        for tweet in tweets_data['data']:
+            author_id = tweet.get('author_id')
+            if author_id and author_id not in accounts:
+                # Get user info from includes
+                user_info = None
+                if 'includes' in tweets_data and 'users' in tweets_data['includes']:
+                    for user in tweets_data['includes']['users']:
+                        if user['id'] == author_id:
+                            user_info = user
+                            break
+                
+                if user_info:
+                    # Count tweets from this user in results
+                    tweet_count = sum(1 for t in tweets_data['data'] if t.get('author_id') == author_id)
+                    
+                    accounts[author_id] = {
+                        'id': user_info['id'],
+                        'username': user_info['username'],
+                        'name': user_info['name'],
+                        'description': user_info.get('description', ''),
+                        'followers_count': user_info.get('public_metrics', {}).get('followers_count', 0),
+                        'following_count': user_info.get('public_metrics', {}).get('following_count', 0),
+                        'tweet_count': user_info.get('public_metrics', {}).get('tweet_count', 0),
+                        'verified': user_info.get('verified', False),
+                        'created_at': user_info.get('created_at', ''),
+                        'profile_image_url': user_info.get('profile_image_url', ''),
+                        'matching_tweets': tweet_count,
+                        'location': user_info.get('location', '')
+                    }
+        
+        # Sort by matching tweets (most relevant first)
+        sorted_accounts = sorted(accounts.values(), key=lambda x: x['matching_tweets'], reverse=True)
+        
+        return {
+            'accounts': sorted_accounts,
+            'total_accounts': len(accounts),
+            'search_keywords': keywords,
+            'tweets_searched': len(tweets_data['data'])
+        }
+    
     def analyze_account_type(self, user_data):
         """Determine if account is enterprise/business/personal"""
         description = user_data.get('description', '').lower()
