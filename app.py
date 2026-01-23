@@ -27,8 +27,9 @@ def health():
     try:
         db = get_db_session()
         try:
-            # Try to query database
-            db.execute('SELECT 1')
+            # Try to query database - use text() for SQLAlchemy 2.0
+            from sqlalchemy import text
+            db.execute(text('SELECT 1'))
             db_status = 'connected'
             db_type = 'PostgreSQL' if 'postgresql' in str(engine.url) else 'SQLite'
             
