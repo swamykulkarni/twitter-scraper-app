@@ -390,25 +390,35 @@ async function loadReports() {
         const container = document.getElementById('reports-container');
         
         if (!data.reports || data.reports.length === 0) {
-            container.innerHTML = '<p style="color: #666;">No reports yet. Generate one in the Quick Scrape tab!</p>';
+            container.innerHTML = '<p style="color: #666;">No reports yet. Generate one in the Twitter or Reddit Scraping tabs!</p>';
             return;
         }
         
-        container.innerHTML = data.reports.map(report => `
-            <div class="report-item">
-                <div class="report-info">
-                    <strong>@${report.username}</strong>
-                    ${report.keywords ? `<span style="color: #666;"> • Keywords: ${report.keywords.join(', ')}</span>` : ''}
-                    <div class="report-meta">
-                        ${report.tweet_count} tweets • ${report.account_type || 'N/A'} • Lead Score: ${report.lead_score || 'N/A'}/7
-                        <br>Generated: ${new Date(report.created_at).toLocaleString()}
+        container.innerHTML = data.reports.map(report => {
+            const platform = report.platform || 'twitter';
+            const platformIcon = platform === 'reddit' ? '🔍' : '🐦';
+            const platformLabel = platform === 'reddit' ? 'Reddit' : 'Twitter';
+            const usernamePrefix = platform === 'reddit' ? 'r/' : '@';
+            
+            return `
+                <div class="report-item">
+                    <div class="report-info">
+                        <strong>${platformIcon} ${usernamePrefix}${report.username}</strong>
+                        <span style="color: #999; font-size: 0.9em;"> • ${platformLabel}</span>
+                        ${report.keywords && report.keywords.length > 0 ? `<span style="color: #666;"> • Keywords: ${report.keywords.join(', ')}</span>` : ''}
+                        <div class="report-meta">
+                            ${report.tweet_count || 0} ${platform === 'reddit' ? 'posts' : 'tweets'}
+                            ${report.account_type ? ` • ${report.account_type}` : ''}
+                            ${report.lead_score ? ` • Lead Score: ${report.lead_score}/7` : ''}
+                            <br>Generated: ${new Date(report.created_at).toLocaleString()}
+                        </div>
+                    </div>
+                    <div class="report-actions">
+                        <button class="btn-view" data-report-id="${report.id}">View</button>
                     </div>
                 </div>
-                <div class="report-actions">
-                    <button class="btn-view" data-report-id="${report.id}">View</button>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
         
         // Add event listeners to view buttons
         document.querySelectorAll('.btn-view').forEach(btn => {
@@ -420,7 +430,7 @@ async function loadReports() {
     } catch (error) {
         console.error('Error loading reports:', error);
         document.getElementById('reports-container').innerHTML = 
-            '<p style="color: #f44336;">Error loading reports</p>';
+            `<p style="color: #f44336;">Error loading reports: ${error.message}</p>`;
     }
 }
 

@@ -134,6 +134,37 @@ def cleanup_legacy_schedules():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/debug/reports')
+def debug_reports():
+    """Debug endpoint to see all reports in database"""
+    try:
+        db = get_db_session()
+        try:
+            all_reports = db.query(Report).order_by(Report.created_at.desc()).all()
+            reports_data = []
+            for r in all_reports:
+                reports_data.append({
+                    'id': r.id,
+                    'platform': r.platform,
+                    'username': r.username,
+                    'keywords': r.keywords,
+                    'tweet_count': r.tweet_count,
+                    'account_type': r.account_type,
+                    'lead_score': r.lead_score,
+                    'created_at': r.created_at.isoformat() if r.created_at else None,
+                    'has_report_content': bool(r.report_content),
+                    'has_tweets_data': bool(r.tweets_data)
+                })
+            
+            return jsonify({
+                'total_reports': len(all_reports),
+                'reports': reports_data
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/scrape', methods=['POST'])
 def scrape():
     try:
@@ -271,13 +302,19 @@ def get_reports():
         db = get_db_session()
         try:
             reports = db.query(Report).order_by(Report.created_at.desc()).limit(50).all()
+            reports_list = [r.to_dict() for r in reports]
+            
+            print(f"[REPORTS] Returning {len(reports_list)} reports")
+            
             return jsonify({
                 'success': True,
-                'reports': [r.to_dict() for r in reports]
+                'reports': reports_list,
+                'total': len(reports_list)
             })
         finally:
             db.close()
     except Exception as e:
+        print(f"[REPORTS] Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/reports/<int:report_id>', methods=['GET'])
