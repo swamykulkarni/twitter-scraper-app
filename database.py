@@ -187,13 +187,13 @@ class DeepHistory(Base):
     scrape_type = Column(String)  # 'quick', 'scheduled', 'bulk', 'discovery'
     filters_used = Column(JSON)   # Filters applied during scrape
     
-    # Full-Text Search (PostgreSQL only)
-    search_vector = Column(TSVECTOR)  # For full-text search
+    # Full-Text Search (PostgreSQL only) - Optional, will be added via migration
+    # search_vector = Column(TSVECTOR, nullable=True)  # For full-text search
     
-    # Create GIN index for full-text search (PostgreSQL only)
-    __table_args__ = (
-        Index('idx_deep_history_search_vector', 'search_vector', postgresql_using='gin'),
-    )
+    # Note: search_vector column will be added via migration script
+    # __table_args__ = (
+    #     Index('idx_deep_history_search_vector', 'search_vector', postgresql_using='gin'),
+    # )
     
     def to_dict(self):
         return {
@@ -343,22 +343,10 @@ def save_to_deep_history(
         )
         
         session.add(deep_record)
-        session.flush()  # Get the ID before updating search_vector
+        session.flush()  # Get the ID
         
-        # Update search_vector using PostgreSQL's to_tsvector
-        # Only do this for PostgreSQL (not SQLite)
-        if 'postgresql' in str(engine.url):
-            try:
-                session.execute(
-                    func.to_tsvector('english', searchable_text).label('search_vector')
-                )
-                session.execute(
-                    f"UPDATE deep_history SET search_vector = to_tsvector('english', :text) WHERE id = :id",
-                    {'text': searchable_text, 'id': deep_record.id}
-                )
-            except Exception as search_error:
-                print(f"[DEEP_HISTORY] Warning: Could not update search_vector: {search_error}")
-                # Don't fail the whole operation if search vector fails
+        # Note: search_vector functionality disabled until migration is run
+        # Will be enabled in Phase 2 of deep_history implementation
         
         session.commit()
         session.refresh(deep_record)
@@ -403,7 +391,8 @@ def search_deep_history(query_text, platform=None, limit=50):
             tsquery = func.plainto_tsquery('english', query_text)
             
             query = session.query(DeepHistory).filter(
-                DeepHistory.search_vector.op('@@')(tsquery)
+                # DeepHistory.search_vector.op('@@')(tsquery)  # Disabled until migration
+                DeepHistory.raw_text.ilike(f'%{query_text}%')  # Fallback to simple search
             )
         
         # Add platform filter if specified
