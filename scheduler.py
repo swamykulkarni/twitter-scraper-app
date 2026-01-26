@@ -51,7 +51,7 @@ class ScheduledScraper:
     def run_scrape(self, schedule_config):
         """Execute a scheduled scrape"""
         try:
-            from database import get_db_session, Schedule as DBSchedule, HistoricalTweet, Report
+            from database import get_db_session, Schedule as DBSchedule, HistoricalTweet, Report, save_to_deep_history
             
             username = schedule_config['username']
             keywords = schedule_config.get('keywords')
@@ -80,6 +80,7 @@ class ScheduledScraper:
                 try:
                     # Save report
                     db_report = Report(
+                        platform='twitter',
                         username=username,
                         keywords=keywords,
                         tweet_count=len(tweets_data['data']),
@@ -90,6 +91,30 @@ class ScheduledScraper:
                         filters={}
                     )
                     db.add(db_report)
+                    db.commit()
+                    report_id = db_report.id
+                    
+                    # Save to deep_history for AI/ML features
+                    try:
+                        save_to_deep_history(
+                            username=username,
+                            platform='twitter',
+                            raw_json={
+                                'tweets': tweets_data['data'],
+                                'account_info': user_profile,
+                                'keywords': keywords,
+                                'lead_score': account_analysis.get('score'),
+                                'account_type': account_analysis.get('type'),
+                                'avg_sentiment': account_analysis.get('avg_sentiment')
+                            },
+                            raw_text=report_content,
+                            report_id=report_id,
+                            scrape_type='scheduled',
+                            filters_used={}
+                        )
+                        print(f"✓ Saved to deep_history for @{username}")
+                    except Exception as dh_error:
+                        print(f"[WARNING] Failed to save to deep_history: {dh_error}")
                     
                     # Update schedule last run time and next run time
                     schedule_db = db.query(DBSchedule).filter(DBSchedule.id == schedule_config['id']).first()
