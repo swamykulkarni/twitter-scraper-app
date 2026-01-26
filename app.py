@@ -5,7 +5,7 @@ from datetime import datetime
 from twitter_scraper import TwitterScraper
 from reddit_scraper import RedditScraper
 from scheduler import ScheduledScraper
-from database import init_db, get_db_session, Report, Schedule as DBSchedule, HistoricalTweet, engine, save_to_deep_history, search_deep_history
+from database import init_db, get_db_session, Report, Schedule as DBSchedule, HistoricalTweet, DeepHistory, engine, save_to_deep_history, search_deep_history
 
 # Social Listening Platform - v2.5 (Similar Accounts Feature)
 app = Flask(__name__)
@@ -674,6 +674,284 @@ def search_history():
             'total': len(results_list),
             'query': query_text
         })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/deep-history', methods=['GET'])
+def get_deep_history():
+    """
+    Get deep_history records with optional filters
+    
+    Query parameters:
+    - platform: Filter by platform ('twitter' or 'reddit')
+    - username: Filter by username
+    - scrape_type: Filter by scrape type ('quick', 'scheduled', 'bulk', 'discovery')
+    - limit: Number of records to return (default: 50, max: 500)
+    - offset: Pagination offset (default: 0)
+    - format: Response format ('summary' or 'full', default: 'summary')
+    """
+    try:
+        from database import DeepHistory
+        
+        # Get query parameters
+        platform = request.args.get('platform')
+        username = request.args.get('username')
+        scrape_type = request.args.get('scrape_type')
+        limit = min(int(request.args.get('limit', 50)), 500)
+        offset = int(request.args.get('offset', 0))
+        response_format = request.args.get('format', 'summary')
+        
+        db = get_db_session()
+        try:
+            # Build query
+            query = db.query(DeepHistory)
+            
+            # Apply filters
+            if platform:
+                query = query.filter(DeepHistory.platform == platform)
+            if username:
+                query = query.filter(DeepHistory.username == username)
+            if scrape_type:
+                query = query.filter(DeepHistory.scrape_type == scrape_type)
+            
+            # Get total count before pagination
+            total_count = query.count()
+            
+            # Apply pagination and ordering
+            records = query.order_by(DeepHistory.scraped_at.desc()).offset(offset).limit(limit).all()
+            
+            # Format response based on requested format
+            if response_format == 'full':
+                # Full data including raw_json and raw_text
+                records_list = []
+                for r in records:
+                    record_dict = r.to_dict()
+                    record_dict['raw_json'] = r.raw_json
+                    record_dict['raw_text'] = r.raw_text[:500] + '...' if r.raw_text and len(r.raw_text) > 500 else r.raw_text
+                    record_dict['account_snapshot'] = r.account_snapshot
+                    records_list.append(record_dict)
+            else:
+                # Summary format (default)
+                records_list = [r.to_dict() for r in records]
+            
+            return jsonify({
+                'success': True,
+                'records': records_list,
+                'total': total_count,
+                'limit': limit,
+                'offset': offset,
+                'returned': len(records_list),
+                'filters': {
+                    'platform': platform,
+                    'username': username,
+                    'scrape_type': scrape_type
+                }
+            })
+        finally:
+            db.close()
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/deep-history/<int:record_id>', methods=['GET'])
+def get_deep_history_record(record_id):
+    """Get a specific deep_history record by ID with full data"""
+    try:
+        from database import DeepHistory
+        
+        db = get_db_session()
+        try:
+            record = db.query(DeepHistory).filter(DeepHistory.id == record_id).first()
+            
+            if not record:
+                return jsonify({'error': 'Record not found'}), 404
+            
+            # Return full record with all data
+            record_dict = {
+                'id': record.id,
+                'report_id': record.report_id,
+                'username': record.username,
+                'platform': record.platform,
+                'scraped_at': record.scraped_at.isoformat() if record.scraped_at else None,
+                'scrape_type': record.scrape_type,
+                'total_tweets': record.total_tweets,
+                'total_engagement': record.total_engagement,
+                'avg_sentiment': record.avg_sentiment,
+                'lead_score': record.lead_score,
+                'account_type': record.account_type,
+                'keywords': record.keywords,
+                'hashtags': record.hashtags,
+                'mentions': record.mentions,
+                'urls': record.urls,
+                'tweet_ids': record.tweet_ids,
+                'account_snapshot': record.account_snapshot,
+                'raw_json': record.raw_json,
+                'raw_text': record.raw_text,
+                'raw_csv': record.raw_csv,
+                'topics': record.topics,
+                'ai_analysis': record.ai_analysis,
+                'ai_summary': record.ai_summary,
+                'filters_used': record.filters_used
+            }
+            
+            return jsonify({
+                'success': True,
+                'record': record_dict
+            })
+        finally:
+            db.close()
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/deep-history/stats', methods=['GET'])
+def get_deep_history_stats():
+    """Get statistics about deep_history data"""
+    try:
+        from database import DeepHistory
+        from sqlalchemy import func
+        
+        db = get_db_session()
+        try:
+            # Total records
+            total_records = db.query(func.count(DeepHistory.id)).scalar()
+            
+            # Records by platform
+            platform_stats = db.query(
+                DeepHistory.platform,
+                func.count(DeepHistory.id).label('count')
+            ).group_by(DeepHistory.platform).all()
+            
+            # Records by scrape type
+            scrape_type_stats = db.query(
+                DeepHistory.scrape_type,
+                func.count(DeepHistory.id).label('count')
+            ).group_by(DeepHistory.scrape_type).all()
+            
+            # Top accounts by scrape count
+            top_accounts = db.query(
+                DeepHistory.username,
+                DeepHistory.platform,
+                func.count(DeepHistory.id).label('scrape_count')
+            ).group_by(DeepHistory.username, DeepHistory.platform).order_by(
+                func.count(DeepHistory.id).desc()
+            ).limit(10).all()
+            
+            # Total tweets/posts collected
+            total_tweets = db.query(func.sum(DeepHistory.total_tweets)).scalar() or 0
+            
+            # Total engagement
+            total_engagement = db.query(func.sum(DeepHistory.total_engagement)).scalar() or 0
+            
+            # Date range
+            first_scrape = db.query(func.min(DeepHistory.scraped_at)).scalar()
+            last_scrape = db.query(func.max(DeepHistory.scraped_at)).scalar()
+            
+            # Unique accounts
+            unique_accounts = db.query(func.count(func.distinct(DeepHistory.username))).scalar()
+            
+            return jsonify({
+                'success': True,
+                'stats': {
+                    'total_records': total_records,
+                    'total_tweets_collected': total_tweets,
+                    'total_engagement': total_engagement,
+                    'unique_accounts': unique_accounts,
+                    'by_platform': {p: c for p, c in platform_stats},
+                    'by_scrape_type': {st: c for st, c in scrape_type_stats},
+                    'top_accounts': [
+                        {'username': u, 'platform': p, 'scrape_count': c}
+                        for u, p, c in top_accounts
+                    ],
+                    'date_range': {
+                        'first_scrape': first_scrape.isoformat() if first_scrape else None,
+                        'last_scrape': last_scrape.isoformat() if last_scrape else None
+                    }
+                }
+            })
+        finally:
+            db.close()
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/deep-history/export', methods=['GET'])
+def export_deep_history():
+    """
+    Export deep_history data as CSV
+    
+    Query parameters:
+    - platform: Filter by platform
+    - username: Filter by username
+    - scrape_type: Filter by scrape type
+    - limit: Number of records (default: 100, max: 1000)
+    """
+    try:
+        from database import DeepHistory
+        import csv
+        from io import StringIO
+        
+        # Get query parameters
+        platform = request.args.get('platform')
+        username = request.args.get('username')
+        scrape_type = request.args.get('scrape_type')
+        limit = min(int(request.args.get('limit', 100)), 1000)
+        
+        db = get_db_session()
+        try:
+            # Build query
+            query = db.query(DeepHistory)
+            
+            if platform:
+                query = query.filter(DeepHistory.platform == platform)
+            if username:
+                query = query.filter(DeepHistory.username == username)
+            if scrape_type:
+                query = query.filter(DeepHistory.scrape_type == scrape_type)
+            
+            records = query.order_by(DeepHistory.scraped_at.desc()).limit(limit).all()
+            
+            # Create CSV
+            output = StringIO()
+            writer = csv.writer(output)
+            
+            # Write header
+            writer.writerow([
+                'id', 'username', 'platform', 'scraped_at', 'scrape_type',
+                'total_tweets', 'total_engagement', 'lead_score', 'account_type',
+                'keywords', 'hashtags', 'mentions', 'avg_sentiment'
+            ])
+            
+            # Write data
+            for r in records:
+                writer.writerow([
+                    r.id,
+                    r.username,
+                    r.platform,
+                    r.scraped_at.isoformat() if r.scraped_at else '',
+                    r.scrape_type,
+                    r.total_tweets,
+                    r.total_engagement,
+                    r.lead_score,
+                    r.account_type,
+                    ','.join(r.keywords) if r.keywords else '',
+                    ','.join(r.hashtags[:10]) if r.hashtags else '',  # Limit to 10
+                    ','.join(r.mentions[:10]) if r.mentions else '',  # Limit to 10
+                    r.avg_sentiment
+                ])
+            
+            # Create response
+            output.seek(0)
+            return output.getvalue(), 200, {
+                'Content-Type': 'text/csv',
+                'Content-Disposition': f'attachment; filename=deep_history_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+            }
+        finally:
+            db.close()
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
