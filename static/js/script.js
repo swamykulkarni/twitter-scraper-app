@@ -396,47 +396,16 @@ async function loadReports() {
         if (!data.reports || data.reports.length === 0) {
             console.log('[REPORTS] No reports found');
             container.innerHTML = '<p style="color: #666;">No reports yet. Generate one in the Twitter or Reddit Scraping tabs!</p>';
+            document.getElementById('reports-pagination-controls').style.display = 'none';
             return;
         }
         
-        console.log('[REPORTS] Rendering', data.reports.length, 'reports');
+        // Store all reports for pagination
+        allReports = data.reports;
         
-        container.innerHTML = data.reports.map(report => {
-            const platform = report.platform || 'twitter';
-            const platformIcon = platform === 'reddit' ? '🔍' : '🐦';
-            const platformLabel = platform === 'reddit' ? 'Reddit' : 'Twitter';
-            const usernamePrefix = platform === 'reddit' ? 'r/' : '@';
-            
-            return `
-                <div class="report-item">
-                    <div class="report-info">
-                        <strong>${platformIcon} ${usernamePrefix}${report.username}</strong>
-                        <span style="color: #999; font-size: 0.9em;"> • ${platformLabel}</span>
-                        ${report.keywords && report.keywords.length > 0 ? `<span style="color: #666;"> • Keywords: ${report.keywords.join(', ')}</span>` : ''}
-                        <div class="report-meta">
-                            ${report.tweet_count || 0} ${platform === 'reddit' ? 'posts' : 'tweets'}
-                            ${report.account_type ? ` • ${report.account_type}` : ''}
-                            ${report.lead_score ? ` • Lead Score: ${report.lead_score}/7` : ''}
-                            <br>Generated: ${new Date(report.created_at).toLocaleString()}
-                        </div>
-                    </div>
-                    <div class="report-actions">
-                        <button class="btn-view" data-report-id="${report.id}">View</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        
-        console.log('[REPORTS] HTML rendered, adding event listeners');
-        
-        // Add event listeners to view buttons
-        document.querySelectorAll('.btn-view').forEach(btn => {
-            btn.addEventListener('click', async function() {
-                const reportId = parseInt(this.getAttribute('data-report-id'));
-                console.log('[REPORTS] Viewing report ID:', reportId);
-                await viewStoredReport(reportId);
-            });
-        });
+        // Display current page
+        displayReports();
+        updateReportsPagination();
         
         console.log('[REPORTS] Load complete');
     } catch (error) {
@@ -444,6 +413,115 @@ async function loadReports() {
         document.getElementById('reports-container').innerHTML = 
             `<p style="color: #f44336;">Error loading reports: ${error.message}</p>`;
     }
+}
+
+function displayReports() {
+    const container = document.getElementById('reports-container');
+    
+    // Calculate pagination
+    const totalPages = Math.ceil(allReports.length / reportsPerPage);
+    const startIndex = (currentReportsPage - 1) * reportsPerPage;
+    const endIndex = Math.min(startIndex + reportsPerPage, allReports.length);
+    const pageReports = allReports.slice(startIndex, endIndex);
+    
+    // Update range display
+    document.getElementById('reports-range').textContent = 
+        `Showing ${startIndex + 1}-${endIndex} of ${allReports.length}`;
+    
+    // Show pagination controls if needed
+    document.getElementById('reports-pagination-controls').style.display = 
+        allReports.length > reportsPerPage ? 'flex' : 'none';
+    
+    console.log('[REPORTS] Rendering', pageReports.length, 'reports');
+    
+    container.innerHTML = pageReports.map(report => {
+        const platform = report.platform || 'twitter';
+        const platformIcon = platform === 'reddit' ? '🔍' : '🐦';
+        const platformLabel = platform === 'reddit' ? 'Reddit' : 'Twitter';
+        const usernamePrefix = platform === 'reddit' ? 'r/' : '@';
+        
+        return `
+            <div class="report-item">
+                <div class="report-info">
+                    <strong>${platformIcon} ${usernamePrefix}${report.username}</strong>
+                    <span style="color: #999; font-size: 0.9em;"> • ${platformLabel}</span>
+                    ${report.keywords && report.keywords.length > 0 ? `<span style="color: #666;"> • Keywords: ${report.keywords.join(', ')}</span>` : ''}
+                    <div class="report-meta">
+                        ${report.tweet_count || 0} ${platform === 'reddit' ? 'posts' : 'tweets'}
+                        ${report.account_type ? ` • ${report.account_type}` : ''}
+                        ${report.lead_score ? ` • Lead Score: ${report.lead_score}/7` : ''}
+                        <br>Generated: ${new Date(report.created_at).toLocaleString()}
+                    </div>
+                </div>
+                <div class="report-actions">
+                    <button class="btn-view" data-report-id="${report.id}">View</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    console.log('[REPORTS] HTML rendered, adding event listeners');
+    
+    // Add event listeners to view buttons
+    document.querySelectorAll('.btn-view').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const reportId = parseInt(this.getAttribute('data-report-id'));
+            console.log('[REPORTS] Viewing report ID:', reportId);
+            await viewStoredReport(reportId);
+        });
+    });
+}
+
+function updateReportsPagination() {
+    const totalPages = Math.ceil(allReports.length / reportsPerPage);
+    const pageNumbersContainer = document.getElementById('reports-page-numbers');
+    
+    // Update button states
+    document.getElementById('reports-first-page').disabled = currentReportsPage === 1;
+    document.getElementById('reports-prev-page').disabled = currentReportsPage === 1;
+    document.getElementById('reports-next-page').disabled = currentReportsPage === totalPages;
+    document.getElementById('reports-last-page').disabled = currentReportsPage === totalPages;
+    
+    // Generate page numbers (show max 7 pages)
+    let pageNumbers = [];
+    if (totalPages <= 7) {
+        pageNumbers = Array.from({length: totalPages}, (_, i) => i + 1);
+    } else {
+        if (currentReportsPage <= 4) {
+            pageNumbers = [1, 2, 3, 4, 5, '...', totalPages];
+        } else if (currentReportsPage >= totalPages - 3) {
+            pageNumbers = [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+        } else {
+            pageNumbers = [1, '...', currentReportsPage - 1, currentReportsPage, currentReportsPage + 1, '...', totalPages];
+        }
+    }
+    
+    pageNumbersContainer.innerHTML = pageNumbers.map(page => {
+        if (page === '...') {
+            return '<span style="padding: 8px; color: #657786;">...</span>';
+        }
+        const isActive = page === currentReportsPage;
+        return `
+            <button class="page-number-btn ${isActive ? 'active' : ''}" 
+                    data-page="${page}"
+                    style="padding: 8px 12px; border: 1px solid #e1e8ed; background: ${isActive ? '#1da1f2' : 'white'}; 
+                           color: ${isActive ? 'white' : '#14171a'}; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                ${page}
+            </button>
+        `;
+    }).join('');
+    
+    // Add event listeners to page number buttons
+    document.querySelectorAll('.page-number-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const page = parseInt(this.getAttribute('data-page'));
+            currentReportsPage = page;
+            displayReports();
+            updateReportsPagination();
+            // Scroll to top of reports
+            document.getElementById('reports-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
 }
 
 // View stored report
@@ -588,6 +666,11 @@ let currentPage = 1;
 let accountsPerPage = 10;
 let filteredAccounts = []; // Currently filtered/sorted accounts
 let isSimilarMode = false;
+
+// Report History Pagination
+let allReports = [];
+let currentReportsPage = 1;
+let reportsPerPage = 10;
 
 // Toggle between keyword and similar account search
 document.getElementById('similar-mode-toggle').addEventListener('change', (e) => {
@@ -1114,3 +1197,55 @@ function applyTypeFilter(accounts, filterType) {
     }
     return accounts;
 }
+
+// Reports Pagination Event Listeners
+document.getElementById('reports-first-page').addEventListener('click', () => {
+    currentReportsPage = 1;
+    displayReports();
+    updateReportsPagination();
+    document.getElementById('reports-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+document.getElementById('reports-prev-page').addEventListener('click', () => {
+    if (currentReportsPage > 1) {
+        currentReportsPage--;
+        displayReports();
+        updateReportsPagination();
+        document.getElementById('reports-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+});
+
+document.getElementById('reports-next-page').addEventListener('click', () => {
+    const totalPages = Math.ceil(allReports.length / reportsPerPage);
+    if (currentReportsPage < totalPages) {
+        currentReportsPage++;
+        displayReports();
+        updateReportsPagination();
+        document.getElementById('reports-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+});
+
+document.getElementById('reports-last-page').addEventListener('click', () => {
+    const totalPages = Math.ceil(allReports.length / reportsPerPage);
+    currentReportsPage = totalPages;
+    displayReports();
+    updateReportsPagination();
+    document.getElementById('reports-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+// Reports per page selector
+document.getElementById('reports-per-page').addEventListener('change', (e) => {
+    const value = e.target.value;
+    
+    if (value === 'all') {
+        reportsPerPage = allReports.length || 10;
+    } else {
+        reportsPerPage = parseInt(value);
+    }
+    
+    // Reset to page 1
+    currentReportsPage = 1;
+    
+    displayReports();
+    updateReportsPagination();
+});

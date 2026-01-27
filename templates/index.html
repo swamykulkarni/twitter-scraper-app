@@ -504,8 +504,31 @@
                 <h2>📚 Report History</h2>
                 <p>View and access all previously generated reports</p>
                 
+                <!-- Pagination Controls -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div id="reports-range" style="color: #657786; font-size: 14px;"></div>
+                    <div>
+                        <label for="reports-per-page" style="margin-right: 8px;">Show:</label>
+                        <select id="reports-per-page" style="padding: 5px;">
+                            <option value="10" selected>10 per page</option>
+                            <option value="25">25 per page</option>
+                            <option value="50">50 per page</option>
+                            <option value="all">All</option>
+                        </select>
+                    </div>
+                </div>
+                
                 <div id="reports-list" class="reports-list">
                     <div id="reports-container">Loading...</div>
+                </div>
+                
+                <!-- Pagination Controls -->
+                <div id="reports-pagination-controls" style="display: flex; justify-content: center; align-items: center; margin-top: 20px; gap: 10px;">
+                    <button id="reports-first-page" class="btn-action" disabled>« First</button>
+                    <button id="reports-prev-page" class="btn-action" disabled>‹ Prev</button>
+                    <div id="reports-page-numbers" style="display: flex; gap: 5px;"></div>
+                    <button id="reports-next-page" class="btn-action">Next ›</button>
+                    <button id="reports-last-page" class="btn-action">Last »</button>
                 </div>
             </div>
         </div>
