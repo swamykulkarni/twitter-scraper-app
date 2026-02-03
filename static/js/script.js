@@ -355,6 +355,7 @@ async function loadSchedules() {
         document.querySelectorAll('.btn-run-now').forEach(btn => {
             btn.addEventListener('click', function() {
                 const scheduleId = parseInt(this.getAttribute('data-schedule-id'));
+                console.log('[RUN_NOW] Button clicked for schedule:', scheduleId);
                 runScheduleNow(scheduleId, this);
             });
         });
@@ -393,7 +394,11 @@ async function deleteSchedule(scheduleId) {
 
 // Run schedule now (manual trigger)
 async function runScheduleNow(scheduleId, buttonElement) {
-    if (!confirm('Run this schedule now? This will not affect the regular schedule timing.')) return;
+    console.log('[RUN_NOW] Function called with scheduleId:', scheduleId);
+    
+    // Skip confirmation - just run immediately when button is clicked
+    // User already clicked the button intentionally, no need for extra confirmation
+    console.log('[RUN_NOW] Starting manual run...');
     
     // Disable button and show loading state
     const originalText = buttonElement.innerHTML;
@@ -402,30 +407,36 @@ async function runScheduleNow(scheduleId, buttonElement) {
     buttonElement.style.opacity = '0.6';
     
     try {
+        console.log('[RUN_NOW] Fetching /schedules/' + scheduleId + '/run');
         const response = await fetch(`/schedules/${scheduleId}/run`, {
             method: 'POST'
         });
         
+        console.log('[RUN_NOW] Response status:', response.status);
         const data = await response.json();
+        console.log('[RUN_NOW] Response data:', data);
         
         if (response.ok && data.success) {
             alert(`✓ Success!\n\nScraped @${data.message.split('@')[1]}\nTweets: ${data.tweet_count}\nAccount Type: ${data.account_type || 'N/A'}\nLead Score: ${data.lead_score || 'N/A'}`);
             loadSchedules();  // Refresh to show updated last_run
             
-            // Switch to history tab to see the new report
-            if (confirm('View the report in Report History?')) {
-                document.querySelector('[data-tab="history"]').click();
+            // Auto-refresh reports to show the new one
+            if (document.getElementById('history-tab').classList.contains('active')) {
+                loadReports();
             }
         } else {
+            console.error('[RUN_NOW] Error:', data.error);
             alert('Error: ' + (data.error || 'Unknown error'));
         }
     } catch (error) {
+        console.error('[RUN_NOW] Network error:', error);
         alert('Network error: ' + error.message);
     } finally {
         // Re-enable button
         buttonElement.disabled = false;
         buttonElement.innerHTML = originalText;
         buttonElement.style.opacity = '1';
+        console.log('[RUN_NOW] Completed');
     }
 }
 
