@@ -472,6 +472,84 @@ def cleanup_legacy_schedules():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/debug/test-schedules', methods=['GET'])
+def test_schedules():
+    """Test all schedules to see which ones can find tweets"""
+    try:
+        db = get_db_session()
+        results = []
+        
+        try:
+            schedules = db.query(DBSchedule).filter(DBSchedule.enabled == True).all()
+            scraper = TwitterScraper()
+            
+            for schedule in schedules:
+                print(f"[TEST] Testing schedule {schedule.id}: @{schedule.username}")
+                
+                # Test without keywords first
+                tweets_no_keywords = scraper.search_user_tweets(
+                    schedule.username,
+                    keywords=None,
+                    max_results=10
+                )
+                
+                # Test with keywords if they exist
+                tweets_with_keywords = None
+                if schedule.keywords:
+                    tweets_with_keywords = scraper.search_user_tweets(
+                        schedule.username,
+                        keywords=schedule.keywords,
+                        max_results=10
+                    )
+                
+                result = {
+                    'schedule_id': schedule.id,
+                    'username': schedule.username,
+                    'keywords': schedule.keywords,
+                    'without_keywords': {
+                        'found': bool(tweets_no_keywords and 'data' in tweets_no_keywords),
+                        'count': len(tweets_no_keywords.get('data', [])) if tweets_no_keywords else 0
+                    },
+                    'with_keywords': {
+                        'found': bool(tweets_with_keywords and 'data' in tweets_with_keywords),
+                        'count': len(tweets_with_keywords.get('data', [])) if tweets_with_keywords else 0
+                    } if schedule.keywords else None,
+                    'recommendation': ''
+                }
+                
+                # Generate recommendation
+                if result['without_keywords']['found']:
+                    if schedule.keywords and not result['with_keywords']['found']:
+                        result['recommendation'] = '⚠️ Remove keywords - account is active but tweets don\'t match keywords'
+                    else:
+                        result['recommendation'] = '✅ Working fine'
+                else:
+                    result['recommendation'] = '❌ No recent tweets (last 7 days) - keep schedule to catch future tweets'
+                
+                results.append(result)
+                print(f"[TEST] Result: {result['recommendation']}")
+            
+            return jsonify({
+                'success': True,
+                'total_schedules': len(schedules),
+                'results': results,
+                'summary': {
+                    'working': len([r for r in results if '✅' in r['recommendation']]),
+                    'needs_keyword_removal': len([r for r in results if '⚠️' in r['recommendation']]),
+                    'inactive': len([r for r in results if '❌' in r['recommendation']])
+                }
+            })
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
 @app.route('/debug/reports')
 def debug_reports():
     """Debug endpoint to see all reports in database"""
