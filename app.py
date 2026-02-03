@@ -550,6 +550,94 @@ def test_schedules():
             'traceback': traceback.format_exc()
         }), 500
 
+@app.route('/debug/test-twitter-api/<username>', methods=['GET'])
+def test_twitter_api(username):
+    """Test Twitter API directly for a specific username with detailed error info"""
+    try:
+        import requests
+        
+        bearer_token = os.getenv('TWITTER_BEARER_TOKEN')
+        if not bearer_token:
+            return jsonify({
+                'error': 'TWITTER_BEARER_TOKEN not configured',
+                'solution': 'Add TWITTER_BEARER_TOKEN to Railway environment variables'
+            }), 500
+        
+        headers = {"Authorization": f"Bearer {bearer_token}"}
+        base_url = "https://api.twitter.com/2"
+        
+        # Test 1: Get user info
+        user_endpoint = f"{base_url}/users/by/username/{username}"
+        user_params = {"user.fields": "public_metrics,created_at,description,verified"}
+        user_response = requests.get(user_endpoint, headers=headers, params=user_params)
+        
+        user_result = {
+            'status_code': user_response.status_code,
+            'success': user_response.status_code == 200,
+            'data': user_response.json() if user_response.status_code == 200 else None,
+            'error': user_response.json() if user_response.status_code != 200 else None
+        }
+        
+        # Test 2: Search recent tweets (no keywords)
+        search_endpoint = f"{base_url}/tweets/search/recent"
+        search_params = {
+            "query": f"from:{username}",
+            "max_results": 10,
+            "tweet.fields": "created_at,public_metrics,text"
+        }
+        search_response = requests.get(search_endpoint, headers=headers, params=search_params)
+        
+        search_result = {
+            'status_code': search_response.status_code,
+            'success': search_response.status_code == 200,
+            'query': search_params['query'],
+            'data': search_response.json() if search_response.status_code == 200 else None,
+            'error': search_response.json() if search_response.status_code != 200 else None,
+            'tweet_count': len(search_response.json().get('data', [])) if search_response.status_code == 200 else 0
+        }
+        
+        # Diagnosis
+        diagnosis = []
+        if not user_result['success']:
+            if user_result['status_code'] == 429:
+                diagnosis.append('🚫 RATE LIMIT: Twitter API rate limit exceeded. Wait 15 minutes.')
+            elif user_result['status_code'] == 401:
+                diagnosis.append('🔑 AUTH ERROR: Invalid or expired Twitter Bearer Token')
+            elif user_result['status_code'] == 404:
+                diagnosis.append('❌ USER NOT FOUND: Account does not exist or username is wrong')
+            else:
+                diagnosis.append(f'⚠️ API ERROR: Status {user_result["status_code"]}')
+        elif not search_result['success']:
+            if search_result['status_code'] == 429:
+                diagnosis.append('🚫 RATE LIMIT: Twitter API rate limit exceeded. Wait 15 minutes.')
+            elif search_result['status_code'] == 401:
+                diagnosis.append('🔑 AUTH ERROR: Invalid or expired Twitter Bearer Token')
+            else:
+                diagnosis.append(f'⚠️ SEARCH ERROR: Status {search_result["status_code"]}')
+        elif search_result['tweet_count'] == 0:
+            diagnosis.append('📭 NO TWEETS: Account exists but no tweets found in last 7 days')
+            diagnosis.append('   Possible reasons:')
+            diagnosis.append('   - Account hasn\'t tweeted in 7+ days')
+            diagnosis.append('   - Account is protected/private')
+            diagnosis.append('   - Tweets were deleted')
+        else:
+            diagnosis.append(f'✅ SUCCESS: Found {search_result["tweet_count"]} tweets')
+        
+        return jsonify({
+            'username': username,
+            'user_lookup': user_result,
+            'tweet_search': search_result,
+            'diagnosis': diagnosis,
+            'timestamp': datetime.utcnow().isoformat()
+        })
+        
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
 @app.route('/debug/reports')
 def debug_reports():
     """Debug endpoint to see all reports in database"""
