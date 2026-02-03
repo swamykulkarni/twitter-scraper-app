@@ -267,6 +267,178 @@ def cron_run_schedules():
             'error': str(e)
         }), 500
 
+@app.route('/cron/check-stale-schedules', methods=['POST'])
+def cron_check_stale_schedules():
+    """
+    Cron endpoint to check for stale schedules (not run for 2+ days)
+    Sends email notification if any schedules are stale
+    Called by Railway Cron Jobs daily
+    """
+    try:
+        from datetime import datetime, timedelta
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        db = get_db_session()
+        
+        try:
+            now = datetime.utcnow()
+            two_days_ago = now - timedelta(days=2)
+            
+            # Find enabled schedules that haven't run in 2+ days
+            stale_schedules = db.query(DBSchedule).filter(
+                DBSchedule.enabled == True,
+                DBSchedule.last_run < two_days_ago
+            ).all()
+            
+            # Also check schedules that have never run and were created 2+ days ago
+            never_run_schedules = db.query(DBSchedule).filter(
+                DBSchedule.enabled == True,
+                DBSchedule.last_run == None,
+                DBSchedule.created_at < two_days_ago
+            ).all()
+            
+            all_stale = stale_schedules + never_run_schedules
+            
+            print(f"[STALE_CHECK] Found {len(all_stale)} stale schedule(s)")
+            
+            if len(all_stale) == 0:
+                return jsonify({
+                    'success': True,
+                    'message': 'No stale schedules found',
+                    'stale_count': 0
+                })
+            
+            # Get email configuration from environment
+            smtp_host = os.getenv('SMTP_HOST', 'smtp.gmail.com')
+            smtp_port = int(os.getenv('SMTP_PORT', '587'))
+            smtp_user = os.getenv('SMTP_USER')
+            smtp_password = os.getenv('SMTP_PASSWORD')
+            notification_email = os.getenv('NOTIFICATION_EMAIL')
+            
+            if not all([smtp_user, smtp_password, notification_email]):
+                print("[STALE_CHECK] Email not configured. Set SMTP_USER, SMTP_PASSWORD, and NOTIFICATION_EMAIL environment variables.")
+                return jsonify({
+                    'success': False,
+                    'error': 'Email configuration missing',
+                    'stale_count': len(all_stale),
+                    'stale_schedules': [
+                        {
+                            'id': s.id,
+                            'username': s.username,
+                            'last_run': s.last_run.isoformat() if s.last_run else 'Never',
+                            'days_since_run': (now - s.last_run).days if s.last_run else 'N/A'
+                        }
+                        for s in all_stale
+                    ]
+                })
+            
+            # Build email content
+            email_body = f"""
+<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    <h2 style="color: #e74c3c;">⚠️ Stale Schedule Alert</h2>
+    <p>The following schedule(s) have not run for 2 or more days:</p>
+    
+    <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+        <thead>
+            <tr style="background-color: #f8f9fa;">
+                <th style="border: 1px solid #ddd; padding: 12px; text-align: left;">Schedule ID</th>
+                <th style="border: 1px solid #ddd; padding: 12px; text-align: left;">Username</th>
+                <th style="border: 1px solid #ddd; padding: 12px; text-align: left;">Frequency</th>
+                <th style="border: 1px solid #ddd; padding: 12px; text-align: left;">Last Run</th>
+                <th style="border: 1px solid #ddd; padding: 12px; text-align: left;">Days Since Run</th>
+            </tr>
+        </thead>
+        <tbody>
+"""
+            
+            for schedule in all_stale:
+                last_run_text = schedule.last_run.strftime('%Y-%m-%d %H:%M UTC') if schedule.last_run else 'Never'
+                days_since = (now - schedule.last_run).days if schedule.last_run else 'N/A'
+                
+                email_body += f"""
+            <tr>
+                <td style="border: 1px solid #ddd; padding: 12px;">{schedule.id}</td>
+                <td style="border: 1px solid #ddd; padding: 12px;">@{schedule.username}</td>
+                <td style="border: 1px solid #ddd; padding: 12px;">{schedule.frequency}</td>
+                <td style="border: 1px solid #ddd; padding: 12px;">{last_run_text}</td>
+                <td style="border: 1px solid #ddd; padding: 12px;">{days_since}</td>
+            </tr>
+"""
+            
+            email_body += """
+        </tbody>
+    </table>
+    
+    <p><strong>Action Required:</strong></p>
+    <ul>
+        <li>Check if Railway Cron Jobs are running properly</li>
+        <li>Verify the <code>/cron/run-schedules</code> endpoint is accessible</li>
+        <li>Review Railway deployment logs for errors</li>
+        <li>Consider manually running schedules using the "Run Now" button</li>
+    </ul>
+    
+    <p style="color: #666; font-size: 12px; margin-top: 30px;">
+        This is an automated notification from your Social Listening Platform.<br>
+        Timestamp: """ + now.strftime('%Y-%m-%d %H:%M:%S UTC') + """
+    </p>
+</body>
+</html>
+"""
+            
+            # Create email message
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f'⚠️ Stale Schedule Alert - {len(all_stale)} Schedule(s) Not Running'
+            msg['From'] = smtp_user
+            msg['To'] = notification_email
+            
+            html_part = MIMEText(email_body, 'html')
+            msg.attach(html_part)
+            
+            # Send email
+            try:
+                with smtplib.SMTP(smtp_host, smtp_port) as server:
+                    server.starttls()
+                    server.login(smtp_user, smtp_password)
+                    server.send_message(msg)
+                
+                print(f"[STALE_CHECK] ✓ Email notification sent to {notification_email}")
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'Email notification sent for {len(all_stale)} stale schedule(s)',
+                    'stale_count': len(all_stale),
+                    'notification_sent_to': notification_email
+                })
+                
+            except Exception as email_error:
+                print(f"[STALE_CHECK] ✗ Failed to send email: {email_error}")
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to send email: {str(email_error)}',
+                    'stale_count': len(all_stale),
+                    'stale_schedules': [
+                        {
+                            'id': s.id,
+                            'username': s.username,
+                            'last_run': s.last_run.isoformat() if s.last_run else 'Never'
+                        }
+                        for s in all_stale
+                    ]
+                }), 500
+                
+        finally:
+            db.close()
+            
+    except Exception as e:
+        print(f"[STALE_CHECK] Fatal error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/debug/cleanup-legacy-schedules', methods=['POST'])
 def cleanup_legacy_schedules():
     """Disable schedules without start_datetime (legacy schedules)"""
@@ -1231,6 +1403,112 @@ def delete_schedule(schedule_id):
         scheduler.remove_schedule(schedule_id)
         return jsonify({'success': True})
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/schedules/<int:schedule_id>/run', methods=['POST'])
+def run_schedule_now(schedule_id):
+    """
+    Manually trigger a schedule to run immediately
+    Does not affect the regular schedule timing
+    """
+    try:
+        db = get_db_session()
+        try:
+            # Get the schedule
+            schedule = db.query(DBSchedule).filter(DBSchedule.id == schedule_id).first()
+            
+            if not schedule:
+                return jsonify({'error': 'Schedule not found'}), 404
+            
+            if not schedule.enabled:
+                return jsonify({'error': 'Schedule is disabled'}), 400
+            
+            print(f"[MANUAL_RUN] Running schedule {schedule_id} for @{schedule.username}")
+            
+            # Run the scrape
+            scraper = TwitterScraper()
+            tweets_data = scraper.search_user_tweets(
+                schedule.username, 
+                keywords=schedule.keywords, 
+                max_results=100
+            )
+            
+            if tweets_data and 'data' in tweets_data:
+                # Generate report
+                report_file = scraper.generate_report(
+                    tweets_data, 
+                    schedule.username, 
+                    schedule.keywords
+                )
+                
+                # Read report content
+                with open(report_file, 'r', encoding='utf-8') as f:
+                    report_content = f.read()
+                
+                # Get account analysis
+                user_profile = tweets_data.get('user_profile', {})
+                account_analysis = scraper.analyze_account_type(user_profile) if user_profile else {}
+                
+                # Save to database
+                db_report = Report(
+                    platform='twitter',
+                    username=schedule.username,
+                    keywords=schedule.keywords,
+                    tweet_count=len(tweets_data['data']),
+                    account_type=account_analysis.get('type'),
+                    lead_score=account_analysis.get('score'),
+                    report_content=report_content,
+                    tweets_data=tweets_data,
+                    filters={}
+                )
+                db.add(db_report)
+                db.flush()
+                
+                # Save to deep_history
+                try:
+                    save_to_deep_history(
+                        username=schedule.username,
+                        platform='twitter',
+                        raw_json={
+                            'tweets': tweets_data['data'],
+                            'account_info': user_profile,
+                            'keywords': schedule.keywords,
+                            'lead_score': account_analysis.get('score'),
+                            'account_type': account_analysis.get('type')
+                        },
+                        raw_text=report_content,
+                        report_id=db_report.id,
+                        scrape_type='manual',
+                        filters_used={}
+                    )
+                except Exception as dh_error:
+                    print(f"[MANUAL_RUN] Warning: Failed to save to deep_history: {dh_error}")
+                
+                # Update last_run but don't change next_run (preserve schedule)
+                schedule.last_run = datetime.utcnow()
+                db.commit()
+                
+                print(f"[MANUAL_RUN] ✓ Completed manual run for @{schedule.username}")
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'Successfully scraped @{schedule.username}',
+                    'tweet_count': len(tweets_data['data']),
+                    'report_id': db_report.id,
+                    'account_type': account_analysis.get('type'),
+                    'lead_score': account_analysis.get('score')
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'No tweets found'
+                }), 404
+                
+        finally:
+            db.close()
+            
+    except Exception as e:
+        print(f"[MANUAL_RUN] Error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/historical/<username>')

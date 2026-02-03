@@ -335,7 +335,10 @@ async function loadSchedules() {
                             <small style="color: #999;">${lastRunText}</small>
                         </div>
                     </div>
-                    <button class="btn-delete" data-schedule-id="${schedule.id}">Delete</button>
+                    <div class="schedule-actions">
+                        <button class="btn-run-now" data-schedule-id="${schedule.id}" title="Run this schedule now">▶️ Run Now</button>
+                        <button class="btn-delete" data-schedule-id="${schedule.id}" title="Delete this schedule">Delete</button>
+                    </div>
                 </div>
             `;
         }).join('');
@@ -345,6 +348,14 @@ async function loadSchedules() {
             btn.addEventListener('click', function() {
                 const scheduleId = parseInt(this.getAttribute('data-schedule-id'));
                 deleteSchedule(scheduleId);
+            });
+        });
+        
+        // Add event listeners to run now buttons
+        document.querySelectorAll('.btn-run-now').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const scheduleId = parseInt(this.getAttribute('data-schedule-id'));
+                runScheduleNow(scheduleId, this);
             });
         });
     } catch (error) {
@@ -377,6 +388,44 @@ async function deleteSchedule(scheduleId) {
         }
     } catch (error) {
         alert('Network error: ' + error.message);
+    }
+}
+
+// Run schedule now (manual trigger)
+async function runScheduleNow(scheduleId, buttonElement) {
+    if (!confirm('Run this schedule now? This will not affect the regular schedule timing.')) return;
+    
+    // Disable button and show loading state
+    const originalText = buttonElement.innerHTML;
+    buttonElement.disabled = true;
+    buttonElement.innerHTML = '⏳ Running...';
+    buttonElement.style.opacity = '0.6';
+    
+    try {
+        const response = await fetch(`/schedules/${scheduleId}/run`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            alert(`✓ Success!\n\nScraped @${data.message.split('@')[1]}\nTweets: ${data.tweet_count}\nAccount Type: ${data.account_type || 'N/A'}\nLead Score: ${data.lead_score || 'N/A'}`);
+            loadSchedules();  // Refresh to show updated last_run
+            
+            // Switch to history tab to see the new report
+            if (confirm('View the report in Report History?')) {
+                document.querySelector('[data-tab="history"]').click();
+            }
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Network error: ' + error.message);
+    } finally {
+        // Re-enable button
+        buttonElement.disabled = false;
+        buttonElement.innerHTML = originalText;
+        buttonElement.style.opacity = '1';
     }
 }
 
