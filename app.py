@@ -1476,12 +1476,12 @@ def view_report(filename):
 
 @app.route('/schedules', methods=['GET'])
 def get_schedules():
-    """Get all schedules from database"""
+    """Get all schedules from database (both active and paused)"""
     try:
         db = get_db_session()
         try:
-            # Get all enabled schedules
-            schedules = db.query(DBSchedule).filter(DBSchedule.enabled == True).all()
+            # Get ALL schedules (enabled and disabled)
+            schedules = db.query(DBSchedule).all()
             
             # Filter out schedules without start_datetime (legacy schedules)
             valid_schedules = []
@@ -1568,6 +1568,68 @@ def delete_schedule(schedule_id):
         
         scheduler.remove_schedule(schedule_id)
         return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/schedules/<int:schedule_id>/pause', methods=['POST'])
+def pause_schedule(schedule_id):
+    """Pause a schedule (disable it temporarily)"""
+    try:
+        db = get_db_session()
+        try:
+            schedule = db.query(DBSchedule).filter(DBSchedule.id == schedule_id).first()
+            
+            if not schedule:
+                return jsonify({'error': 'Schedule not found'}), 404
+            
+            if not schedule.enabled:
+                return jsonify({'error': 'Schedule is already paused'}), 400
+            
+            schedule.enabled = False
+            db.commit()
+            
+            print(f"[PAUSE] Schedule {schedule_id} (@{schedule.username}) paused")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Schedule for @{schedule.username} paused',
+                'schedule': schedule.to_dict()
+            })
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/schedules/<int:schedule_id>/resume', methods=['POST'])
+def resume_schedule(schedule_id):
+    """Resume a paused schedule (enable it)"""
+    try:
+        db = get_db_session()
+        try:
+            schedule = db.query(DBSchedule).filter(DBSchedule.id == schedule_id).first()
+            
+            if not schedule:
+                return jsonify({'error': 'Schedule not found'}), 404
+            
+            if schedule.enabled:
+                return jsonify({'error': 'Schedule is already active'}), 400
+            
+            schedule.enabled = True
+            db.commit()
+            
+            print(f"[RESUME] Schedule {schedule_id} (@{schedule.username}) resumed")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Schedule for @{schedule.username} resumed',
+                'schedule': schedule.to_dict()
+            })
+            
+        finally:
+            db.close()
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

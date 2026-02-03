@@ -254,16 +254,25 @@ async function loadSchedules() {
         if (data.schedules.length === 0) {
             container.innerHTML = '<p style="color: #666;">No schedules yet. Add one above!</p>';
             if (statusLabel) {
-                statusLabel.textContent = 'No active schedules';
+                statusLabel.textContent = 'No schedules';
                 statusLabel.className = 'status-label status-inactive';
             }
             return;
         }
         
+        // Count active vs paused
+        const activeSchedules = data.schedules.filter(s => s.enabled);
+        const pausedSchedules = data.schedules.filter(s => !s.enabled);
+        
         // Update status label
         if (statusLabel) {
-            statusLabel.textContent = `${data.schedules.length} Active Schedule${data.schedules.length > 1 ? 's' : ''}`;
-            statusLabel.className = 'status-label status-active';
+            if (activeSchedules.length > 0) {
+                statusLabel.textContent = `${activeSchedules.length} Active, ${pausedSchedules.length} Paused`;
+                statusLabel.className = 'status-label status-active';
+            } else {
+                statusLabel.textContent = `All Paused (${pausedSchedules.length})`;
+                statusLabel.className = 'status-label status-inactive';
+            }
         }
         
         container.innerHTML = data.schedules.map(schedule => {
@@ -292,7 +301,7 @@ async function loadSchedules() {
             
             // Format next run time
             let nextRunText = '';
-            if (schedule.next_run) {
+            if (schedule.enabled && schedule.next_run) {
                 const nextRun = new Date(schedule.next_run + 'Z');
                 const now = new Date();
                 const diffMs = nextRun - now;
@@ -309,6 +318,8 @@ async function loadSchedules() {
                     const days = Math.floor(diffMins / 1440);
                     nextRunText = `<span style="color: #9b59b6;">In ${days} day${days !== 1 ? 's' : ''}</span>`;
                 }
+            } else if (!schedule.enabled) {
+                nextRunText = '<span style="color: #95a5a6;">⏸️ Paused</span>';
             } else if (schedule.start_datetime) {
                 nextRunText = `<span style="color: #3498db;">First run: ${startDateText}</span>`;
             }
@@ -322,10 +333,15 @@ async function loadSchedules() {
                 schedule.keywords.join(', ') : 
                 'All tweets';
             
+            // Style for paused schedules
+            const itemStyle = schedule.enabled ? '' : 'opacity: 0.6; background: #f9f9f9;';
+            const usernameStyle = schedule.enabled ? 'color: #667eea;' : 'color: #95a5a6;';
+            
             return `
-                <div class="schedule-item">
+                <div class="schedule-item" style="${itemStyle}">
                     <div class="schedule-info">
-                        <strong>@${schedule.username}</strong>
+                        <strong style="${usernameStyle}">@${schedule.username}</strong>
+                        ${!schedule.enabled ? '<span style="color: #95a5a6; font-size: 0.9em;"> (Paused)</span>' : ''}
                         <span style="color: #666;"> • Keywords: ${keywordsText}</span>
                         <div class="schedule-meta">
                             📅 ${frequencyText}
@@ -336,7 +352,11 @@ async function loadSchedules() {
                         </div>
                     </div>
                     <div class="schedule-actions">
-                        <button class="btn-run-now" data-schedule-id="${schedule.id}" title="Run this schedule now">▶️ Run Now</button>
+                        ${schedule.enabled ? 
+                            `<button class="btn-run-now" data-schedule-id="${schedule.id}" title="Run this schedule now">▶️ Run Now</button>
+                             <button class="btn-pause" data-schedule-id="${schedule.id}" title="Pause this schedule">⏸️ Pause</button>` :
+                            `<button class="btn-resume" data-schedule-id="${schedule.id}" title="Resume this schedule">▶️ Resume</button>`
+                        }
                         <button class="btn-delete" data-schedule-id="${schedule.id}" title="Delete this schedule">Delete</button>
                     </div>
                 </div>
@@ -357,6 +377,22 @@ async function loadSchedules() {
                 const scheduleId = parseInt(this.getAttribute('data-schedule-id'));
                 console.log('[RUN_NOW] Button clicked for schedule:', scheduleId);
                 runScheduleNow(scheduleId, this);
+            });
+        });
+        
+        // Add event listeners to pause buttons
+        document.querySelectorAll('.btn-pause').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const scheduleId = parseInt(this.getAttribute('data-schedule-id'));
+                pauseSchedule(scheduleId, this);
+            });
+        });
+        
+        // Add event listeners to resume buttons
+        document.querySelectorAll('.btn-resume').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const scheduleId = parseInt(this.getAttribute('data-schedule-id'));
+                resumeSchedule(scheduleId, this);
             });
         });
     } catch (error) {
@@ -437,6 +473,82 @@ async function runScheduleNow(scheduleId, buttonElement) {
         buttonElement.innerHTML = originalText;
         buttonElement.style.opacity = '1';
         console.log('[RUN_NOW] Completed');
+    }
+}
+
+// Pause schedule
+async function pauseSchedule(scheduleId, buttonElement) {
+    console.log('[PAUSE] Pausing schedule:', scheduleId);
+    
+    // Disable button and show loading state
+    const originalText = buttonElement.innerHTML;
+    buttonElement.disabled = true;
+    buttonElement.innerHTML = '⏳ Pausing...';
+    buttonElement.style.opacity = '0.6';
+    
+    try {
+        const response = await fetch(`/schedules/${scheduleId}/pause`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            console.log('[PAUSE] Success:', data.message);
+            loadSchedules();  // Refresh to show paused state
+        } else {
+            console.error('[PAUSE] Error:', data.error);
+            alert('Error: ' + (data.error || 'Unknown error'));
+            // Re-enable button on error
+            buttonElement.disabled = false;
+            buttonElement.innerHTML = originalText;
+            buttonElement.style.opacity = '1';
+        }
+    } catch (error) {
+        console.error('[PAUSE] Network error:', error);
+        alert('Network error: ' + error.message);
+        // Re-enable button on error
+        buttonElement.disabled = false;
+        buttonElement.innerHTML = originalText;
+        buttonElement.style.opacity = '1';
+    }
+}
+
+// Resume schedule
+async function resumeSchedule(scheduleId, buttonElement) {
+    console.log('[RESUME] Resuming schedule:', scheduleId);
+    
+    // Disable button and show loading state
+    const originalText = buttonElement.innerHTML;
+    buttonElement.disabled = true;
+    buttonElement.innerHTML = '⏳ Resuming...';
+    buttonElement.style.opacity = '0.6';
+    
+    try {
+        const response = await fetch(`/schedules/${scheduleId}/resume`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            console.log('[RESUME] Success:', data.message);
+            loadSchedules();  // Refresh to show active state
+        } else {
+            console.error('[RESUME] Error:', data.error);
+            alert('Error: ' + (data.error || 'Unknown error'));
+            // Re-enable button on error
+            buttonElement.disabled = false;
+            buttonElement.innerHTML = originalText;
+            buttonElement.style.opacity = '1';
+        }
+    } catch (error) {
+        console.error('[RESUME] Network error:', error);
+        alert('Network error: ' + error.message);
+        // Re-enable button on error
+        buttonElement.disabled = false;
+        buttonElement.innerHTML = originalText;
+        buttonElement.style.opacity = '1';
     }
 }
 
