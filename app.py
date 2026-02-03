@@ -266,10 +266,6 @@ def cron_run_schedules():
             'success': False,
             'error': str(e)
         }), 500
-        finally:
-            db.close()
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/debug/cleanup-legacy-schedules', methods=['POST'])
 def cleanup_legacy_schedules():
