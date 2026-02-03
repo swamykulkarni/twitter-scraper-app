@@ -103,6 +103,174 @@ def debug_schedules():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/cron/run-schedules', methods=['POST'])
+def cron_run_schedules():
+    """
+    Cron endpoint to run scheduled scrapes
+    Called by Railway Cron Jobs every hour
+    
+    This replaces the in-memory scheduler with external cron jobs
+    """
+    try:
+        from datetime import datetime, timedelta
+        
+        db = get_db_session()
+        results = {
+            'executed': [],
+            'skipped': [],
+            'errors': []
+        }
+        
+        try:
+            # Get current time
+            now = datetime.utcnow()
+            
+            # Find schedules that should run now
+            # Check schedules where next_run is in the past or within the next hour
+            schedules_to_run = db.query(DBSchedule).filter(
+                DBSchedule.enabled == True,
+                DBSchedule.next_run <= now + timedelta(hours=1)
+            ).all()
+            
+            print(f"[CRON] Found {len(schedules_to_run)} schedules to check")
+            
+            for schedule in schedules_to_run:
+                try:
+                    # Check if it's actually time to run (within 5 minutes of scheduled time)
+                    if schedule.next_run and schedule.next_run <= now + timedelta(minutes=5):
+                        print(f"[CRON] Running schedule {schedule.id} for @{schedule.username}")
+                        
+                        # Run the scrape
+                        scraper = TwitterScraper()
+                        tweets_data = scraper.search_user_tweets(
+                            schedule.username, 
+                            keywords=schedule.keywords, 
+                            max_results=100
+                        )
+                        
+                        if tweets_data and 'data' in tweets_data:
+                            # Generate report
+                            report_file = scraper.generate_report(
+                                tweets_data, 
+                                schedule.username, 
+                                schedule.keywords
+                            )
+                            
+                            # Read report content
+                            with open(report_file, 'r', encoding='utf-8') as f:
+                                report_content = f.read()
+                            
+                            # Get account analysis
+                            user_profile = tweets_data.get('user_profile', {})
+                            account_analysis = scraper.analyze_account_type(user_profile) if user_profile else {}
+                            
+                            # Save to database
+                            db_report = Report(
+                                platform='twitter',
+                                username=schedule.username,
+                                keywords=schedule.keywords,
+                                tweet_count=len(tweets_data['data']),
+                                account_type=account_analysis.get('type'),
+                                lead_score=account_analysis.get('score'),
+                                report_content=report_content,
+                                tweets_data=tweets_data,
+                                filters={}
+                            )
+                            db.add(db_report)
+                            db.flush()
+                            
+                            # Save to deep_history
+                            try:
+                                save_to_deep_history(
+                                    username=schedule.username,
+                                    platform='twitter',
+                                    raw_json={
+                                        'tweets': tweets_data['data'],
+                                        'account_info': user_profile,
+                                        'keywords': schedule.keywords,
+                                        'lead_score': account_analysis.get('score'),
+                                        'account_type': account_analysis.get('type')
+                                    },
+                                    raw_text=report_content,
+                                    report_id=db_report.id,
+                                    scrape_type='scheduled',
+                                    filters_used={}
+                                )
+                            except Exception as dh_error:
+                                print(f"[CRON] Warning: Failed to save to deep_history: {dh_error}")
+                            
+                            # Update schedule
+                            schedule.last_run = now
+                            
+                            # Calculate next run based on frequency
+                            if schedule.frequency == 'once':
+                                schedule.enabled = False
+                                schedule.next_run = None
+                            elif schedule.frequency == 'hourly':
+                                schedule.next_run = now + timedelta(hours=1)
+                            elif schedule.frequency == 'daily':
+                                schedule.next_run = now + timedelta(days=1)
+                            elif schedule.frequency == 'weekly':
+                                schedule.next_run = now + timedelta(weeks=1)
+                            
+                            db.commit()
+                            
+                            results['executed'].append({
+                                'schedule_id': schedule.id,
+                                'username': schedule.username,
+                                'tweet_count': len(tweets_data['data']),
+                                'next_run': schedule.next_run.isoformat() if schedule.next_run else None
+                            })
+                            
+                            print(f"[CRON] ✓ Completed schedule {schedule.id} for @{schedule.username}")
+                        else:
+                            results['skipped'].append({
+                                'schedule_id': schedule.id,
+                                'username': schedule.username,
+                                'reason': 'No tweets found'
+                            })
+                            print(f"[CRON] ✗ No tweets found for @{schedule.username}")
+                    else:
+                        results['skipped'].append({
+                            'schedule_id': schedule.id,
+                            'username': schedule.username,
+                            'reason': f'Not yet time (next_run: {schedule.next_run})'
+                        })
+                        
+                except Exception as e:
+                    results['errors'].append({
+                        'schedule_id': schedule.id,
+                        'username': schedule.username,
+                        'error': str(e)
+                    })
+                    print(f"[CRON] ✗ Error running schedule {schedule.id}: {e}")
+                    db.rollback()
+            
+            return jsonify({
+                'success': True,
+                'timestamp': now.isoformat(),
+                'results': results,
+                'summary': {
+                    'executed': len(results['executed']),
+                    'skipped': len(results['skipped']),
+                    'errors': len(results['errors'])
+                }
+            })
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        print(f"[CRON] Fatal error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/debug/cleanup-legacy-schedules', methods=['POST'])
 def cleanup_legacy_schedules():
     """Disable schedules without start_datetime (legacy schedules)"""
