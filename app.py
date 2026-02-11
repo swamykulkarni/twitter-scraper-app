@@ -1117,15 +1117,19 @@ def get_reports():
     try:
         db = get_db_session()
         try:
-            reports = db.query(Report).order_by(Report.created_at.desc()).limit(50).all()
+            # Get total count first
+            total_count = db.query(Report).count()
+            
+            # Get all reports (no limit)
+            reports = db.query(Report).order_by(Report.created_at.desc()).all()
             reports_list = [r.to_dict() for r in reports]
             
-            print(f"[REPORTS] Returning {len(reports_list)} reports")
+            print(f"[REPORTS] Returning {len(reports_list)} reports out of {total_count} total")
             
             return jsonify({
                 'success': True,
                 'reports': reports_list,
-                'total': len(reports_list)
+                'total': total_count
             })
         finally:
             db.close()
