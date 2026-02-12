@@ -148,7 +148,7 @@ def cron_run_schedules():
                             max_results=100
                         )
                         
-                        if tweets_data and 'data' in tweets_data:
+                        if tweets_data and 'data' in tweets_data and len(tweets_data.get('data', [])) > 0:
                             # Generate report
                             report_file = scraper.generate_report(
                                 tweets_data, 
@@ -199,22 +199,6 @@ def cron_run_schedules():
                             except Exception as dh_error:
                                 print(f"[CRON] Warning: Failed to save to deep_history: {dh_error}")
                             
-                            # Update schedule
-                            schedule.last_run = now
-                            
-                            # Calculate next run based on frequency
-                            if schedule.frequency == 'once':
-                                schedule.enabled = False
-                                schedule.next_run = None
-                            elif schedule.frequency == 'hourly':
-                                schedule.next_run = now + timedelta(hours=1)
-                            elif schedule.frequency == 'daily':
-                                schedule.next_run = now + timedelta(days=1)
-                            elif schedule.frequency == 'weekly':
-                                schedule.next_run = now + timedelta(weeks=1)
-                            
-                            db.commit()
-                            
                             results['executed'].append({
                                 'schedule_id': schedule.id,
                                 'username': schedule.username,
@@ -224,12 +208,30 @@ def cron_run_schedules():
                             
                             print(f"[CRON] ✓ Completed schedule {schedule.id} for @{schedule.username}")
                         else:
+                            # No tweets found or API error - still update schedule to prevent getting stuck
                             results['skipped'].append({
                                 'schedule_id': schedule.id,
                                 'username': schedule.username,
-                                'reason': 'No tweets found'
+                                'reason': 'No tweets found or API error'
                             })
                             print(f"[CRON] ✗ No tweets found for @{schedule.username}")
+                        
+                        # ALWAYS update schedule timing, even on failure
+                        # This prevents schedules from getting stuck
+                        schedule.last_run = now
+                        
+                        # Calculate next run based on frequency
+                        if schedule.frequency == 'once':
+                            schedule.enabled = False
+                            schedule.next_run = None
+                        elif schedule.frequency == 'hourly':
+                            schedule.next_run = now + timedelta(hours=1)
+                        elif schedule.frequency == 'daily':
+                            schedule.next_run = now + timedelta(days=1)
+                        elif schedule.frequency == 'weekly':
+                            schedule.next_run = now + timedelta(weeks=1)
+                        
+                        db.commit()
                     else:
                         results['skipped'].append({
                             'schedule_id': schedule.id,
